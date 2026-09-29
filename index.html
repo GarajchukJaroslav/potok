@@ -70,13 +70,25 @@
     <button class="nav-btn nav-down" onclick="goDown()" title="Дальше">↓</button>
   </section>
 
-  <!-- ЭКРАН 3: ЧЕКЛИСТ -->
+    <!-- ЭКРАН 3: ЧЕКЛИСТ -->
   <section class="screen" data-view="checklist">
     <div class="screen-inner">
       <div class="page-title">
         ✅ Чеклист
       </div>
-      <div class="list" id="checklistList"></div>
+      <div class="checklist-cols">
+        <div class="checklist-main">
+          <div class="checklist-section-title">События системы</div>
+          <div class="list" id="checklistList"></div>
+        </div>
+        <div class="checklist-side">
+          <div class="checklist-side-head">
+            <div class="checklist-section-title" style="margin:0;">Не хочу делать</div>
+            <button class="manual-add-btn" onclick="openManualPicker()" title="Добавить">+</button>
+          </div>
+          <div class="list" id="checklistManualList"></div>
+        </div>
+      </div>
     </div>
     <button class="nav-btn nav-up" onclick="goUp()" title="Назад">↑</button>
     <button class="nav-btn nav-down" onclick="goDown()" title="Дальше">↓</button>
@@ -122,6 +134,28 @@
       <div class="modal-detail-col">
         <div class="day-detail" id="dayDetail"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: НЕ ХОЧУ ДЕЛАТЬ -->
+<div class="manual-overlay" id="manualOverlay" onclick="if(event.target===this) closeManualPicker()">
+  <div class="manual-modal">
+    <div class="manual-modal-head">
+      <div class="manual-modal-title">Не хочу делать</div>
+      <button class="modal-close" onclick="closeManualPicker()">✕</button>
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Что не хочется делать</label>
+      <select class="manual-select" id="manualTaskSelect"></select>
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Когда не хочется</label>
+      <input class="manual-date" type="date" id="manualDate">
+    </div>
+    <div class="manual-actions">
+      <button class="manual-btn" onclick="closeManualPicker()">Отмена</button>
+      <button class="manual-btn accent" onclick="createManualEvent()">Создать событие</button>
     </div>
   </div>
 </div>
