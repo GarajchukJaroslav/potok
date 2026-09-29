@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Поток</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="flow" id="flow">
+
+  <!-- ЭКРАН 1: ЦЕЛИ -->
+  <section class="screen" data-view="goals">
+    <div class="screen-dots"></div>
+    <div class="screen-inner">
+      <div class="page-title no-back">
+        🎯 Цели
+        <span class="page-title-sub">Глобальные большие цели. Разбивай на шаги и иди.</span>
+      </div>
+      <div class="goals-bar">
+        <input id="goalInput" placeholder="Новая цель..." maxlength="200">
+        <button class="btn-add" onclick="addGoal()">+</button>
+      </div>
+      <div class="list" id="goalList"></div>
+    </div>
+    <button class="nav-btn nav-down" onclick="goDown()" title="Дальше">↓</button>
+  </section>
+
+  <!-- ЭКРАН 2: РУТИНА / ЗОЖ -->
+  <section class="screen" data-view="routine">
+    <div class="screen-dots"></div>
+    <div class="screen-inner">
+      <div class="page-title">
+        💪 Рутина / ЗОЖ
+        <span class="page-title-sub">Ежедневные привычки и место под канбан-доску.</span>
+      </div>
+      <div class="cols cols-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-icon p1">🎯</div>
+            <div style="flex:1">
+              <div class="card-title">Привычки</div>
+              <div class="card-sub" id="habitSub">иду дальше каждый день</div>
+            </div>
+          </div>
+          <div class="input-row">
+            <input id="habitInput" placeholder="Новая привычка..." maxlength="80">
+            <button class="btn-add" onclick="addHabit()">+</button>
+          </div>
+          <div class="presets" id="presets">
+            <button class="preset active" data-target="1" data-period="day">ежедневно</button>
+            <button class="preset" data-target="2" data-period="day">2× в день</button>
+            <button class="preset" data-target="3" data-period="day">3× в день</button>
+            <button class="preset" data-target="3" data-period="week">3× в неделю</button>
+            <button class="preset" data-target="5" data-period="week">5× в неделю</button>
+          </div>
+          <div class="list" id="habitList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-icon p2">📋</div>
+            <div>
+              <div class="card-title">Канбан</div>
+              <div class="card-sub">Место под доску задач</div>
+            </div>
+          </div>
+          <div class="placeholder">
+            <div class="placeholder-icon">📋</div>
+            <div class="placeholder-title">Здесь будет Канбан</div>
+            <div class="placeholder-sub">Сделать → В процессе → Сделано. Появится отдельно.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="nav-btn nav-up" onclick="goUp()" title="Назад">↑</button>
+    <button class="nav-btn nav-down" onclick="goDown()" title="Дальше">↓</button>
+  </section>
+
+  <!-- ЭКРАН 3: ЧЕКЛИСТ (заглушка) -->
+  <section class="screen" data-view="checklist">
+    <div class="screen-dots"></div>
+    <div class="screen-inner">
+      <div class="page-title">
+        ✅ Чеклист
+        <span class="page-title-sub">Маркеры для анализа. Пока в разработке.</span>
+      </div>
+      <div class="placeholder">
+        <div class="placeholder-icon">✅</div>
+        <div class="placeholder-title">Здесь будет Чеклист</div>
+        <div class="placeholder-sub">Маркеры, которые триггерят Анализ: пропустил 2 раза подряд, цель не сделал по причине, а не потому что не успел.</div>
+      </div>
+    </div>
+    <button class="nav-btn nav-up" onclick="goUp()" title="Назад">↑</button>
+    <button class="nav-btn nav-down" onclick="goDown()" title="Дальше">↓</button>
+  </section>
+
+  <!-- ЭКРАН 4: АНАЛИЗ → ДЕЙСТВИЯ -->
+  <section class="screen" data-view="analysis">
+    <div class="screen-dots"></div>
+    <div class="screen-inner">
+      <div class="page-title">
+        🔍 Анализ → Действия
+        <span class="page-title-sub">Пиши проблему. Вытаскивай действие.</span>
+      </div>
+      <div class="cols cols-2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-icon p2">💭</div>
+            <div>
+              <div class="card-title">Анализ</div>
+              <div class="card-sub">Пиши проблему. Найди, что с ней делать.</div>
+            </div>
+          </div>
+          <textarea class="thought-textarea" id="thoughtInput" placeholder="Что я не могу сделать? Почему? Что с этим делать?..."></textarea>
+          <button class="btn-primary" onclick="addThought()">Записать мысль</button>
+          <div class="list" id="thoughtList"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-icon p4">⚡</div>
+            <div>
+              <div class="card-title">Действия</div>
+              <div class="card-sub">Во что превратились мысли</div>
+            </div>
+          </div>
+          <div class="list" id="ruleList"></div>
+        </div>
+      </div>
+    </div>
+    <button class="nav-btn nav-up" onclick="goUp()" title="Назад">↑</button>
+  </section>
+
+</div>
+
+<!-- МОДАЛКА ИСТОРИИ ПРИВЫЧКИ -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this) closeHabitModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <div style="flex:1; min-width:0">
+        <div class="modal-title" id="modalTitle"></div>
+        <div class="modal-sub" id="modalSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeHabitModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-cal-col">
+        <div class="month-nav">
+          <button onclick="changeMonth(-1)">←</button>
+          <div id="monthLabel"></div>
+          <button onclick="changeMonth(1)">→</button>
+        </div>
+        <div class="calendar" id="calendar"></div>
+      </div>
+      <div class="modal-detail-col">
+        <div class="day-detail" id="dayDetail"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/goals.js"></script>
+<script src="js/routine.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
