@@ -1,6 +1,5 @@
 /* ==================================================================
    НАВИГАЦИЯ + INIT
-   Подключается ПОСЛЕДНИМ, после всех вьюх.
 ================================================================== */
 
 const SCREENS = ['goals','routine','checklist','analysis'];
@@ -41,13 +40,12 @@ function goUp(){ goTo(currentIndex - 1); }
 
 /* ============ INIT ============ */
 function init(){
-  // рендер всех экранов
   renderGoalList();
   renderHabits();
+  renderKanban();
   renderThoughts();
   renderRules();
 
-  // навигация
   updateScreenHeight();
   const startView = (location.hash || '').replace('#','');
   const startIdx = SCREENS.indexOf(startView);
@@ -55,13 +53,11 @@ function init(){
   applyFlowTransform();
   updateDots();
 
-  // события: цели
   const goalInput = document.getElementById('goalInput');
   if(goalInput) goalInput.addEventListener('keydown', e => {
     if(e.key === 'Enter') addGoal();
   });
 
-  // события: привычки
   const habitInput = document.getElementById('habitInput');
   if(habitInput) habitInput.addEventListener('keydown', e => {
     if(e.key === 'Enter') addHabit();
@@ -79,13 +75,11 @@ function init(){
     };
   });
 
-  // события: анализ
   const thoughtInput = document.getElementById('thoughtInput');
   if(thoughtInput) thoughtInput.addEventListener('keydown', e => {
     if(e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addThought();
   });
 
-  // общие события
   window.addEventListener('resize', updateScreenHeight);
   window.addEventListener('orientationchange', () => setTimeout(updateScreenHeight, 100));
 
