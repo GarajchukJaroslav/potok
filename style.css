@@ -1422,3 +1422,175 @@ body::after{
   transform:translateY(-1px);
   box-shadow:0 10px 32px rgba(255,77,109,0.5);
 }
+
+
+/* ============ ЧЕКЛИСТ: ДВЕ КОЛОНКИ ============ */
+.checklist-cols{
+  flex:1; min-height:0;
+  display:grid;
+  grid-template-columns: 2fr 1fr;
+  gap:20px;
+}
+@media(max-width:1000px){
+  .checklist-cols{ grid-template-columns:1fr; }
+}
+
+.checklist-main,
+.checklist-side{
+  min-height:0;
+  display:flex; flex-direction:column;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:20px;
+  overflow:hidden;
+}
+
+.checklist-side{
+  background:linear-gradient(180deg, rgba(255,159,77,0.04), rgba(124,92,255,0.02));
+  border-color:rgba(255,159,77,0.15);
+}
+
+.checklist-side-head{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:14px; flex-shrink:0;
+}
+.checklist-section-title{
+  font-size:11px; font-weight:700;
+  letter-spacing:0.6px; text-transform:uppercase;
+  color:var(--muted); margin-bottom:14px;
+}
+
+.manual-add-btn{
+  background:linear-gradient(135deg, rgba(255,159,77,0.25), rgba(255,159,77,0.1));
+  border:1px solid rgba(255,159,77,0.4);
+  color:#ffb87a;
+  width:32px; height:32px; border-radius:10px;
+  font-family:inherit; font-size:18px; font-weight:300;
+  cursor:pointer; transition:all 0.15s;
+  display:grid; place-items:center;
+  padding:0;
+}
+.manual-add-btn:hover{
+  background:linear-gradient(135deg, rgba(255,159,77,0.4), rgba(255,159,77,0.2));
+  color:#fff;
+  transform:scale(1.05);
+}
+
+.checklist-main .list,
+.checklist-side .list{
+  flex:1; min-height:0;
+  overflow-y:auto;
+  display:flex; flex-direction:column; gap:10px;
+  padding-right:4px;
+}
+.checklist-main .list::-webkit-scrollbar,
+.checklist-side .list::-webkit-scrollbar{ width:5px; }
+.checklist-main .list::-webkit-scrollbar-thumb,
+.checklist-side .list::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.1); border-radius:3px; }
+
+/* Вариант события "manual" (своё) */
+.checklist-event.manual{
+  background:linear-gradient(135deg, rgba(255,159,77,0.07), rgba(124,92,255,0.03));
+  border-color:rgba(255,159,77,0.25);
+}
+
+/* Кнопка "удалить без решения" */
+.btn-cancel-focus.danger{
+  background:rgba(255,77,109,0.12);
+  border-color:rgba(255,77,109,0.3);
+  color:#ff8f9c;
+}
+.btn-cancel-focus.danger:hover{
+  background:rgba(255,77,109,0.25);
+  color:#fff;
+}
+
+/* ============ МОДАЛКА «НЕ ХОЧУ ДЕЛАТЬ» ============ */
+.manual-overlay{
+  position:fixed; inset:0; z-index:150;
+  background:rgba(0,0,0,0.75);
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  display:none; align-items:center; justify-content:center;
+  padding:20px;
+  animation:fadeIn 0.2s;
+}
+.manual-overlay.open{ display:flex; }
+
+.manual-modal{
+  width:100%; max-width:480px;
+  background:linear-gradient(135deg, rgba(32,22,52,0.99), rgba(15,15,28,0.99));
+  border:1px solid rgba(255,159,77,0.3);
+  border-radius:22px;
+  padding:26px;
+  box-shadow:0 30px 100px rgba(0,0,0,0.7), 0 0 60px rgba(255,159,77,0.12);
+  animation: scaleIn 0.25s cubic-bezier(0.4,0,0.2,1);
+  display:flex; flex-direction:column; gap:16px;
+}
+
+.manual-modal-head{
+  display:flex; justify-content:space-between; align-items:center;
+  gap:12px;
+}
+.manual-modal-title{
+  font-size:20px; font-weight:700; letter-spacing:-0.4px;
+}
+
+.manual-field{
+  display:flex; flex-direction:column; gap:6px;
+}
+.manual-label{
+  font-size:11px; font-weight:700;
+  color:var(--muted); letter-spacing:0.4px;
+  text-transform:uppercase;
+}
+.manual-select,
+.manual-date{
+  width:100%;
+  background:rgba(0,0,0,0.4);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px 14px;
+  color:var(--text);
+  font-size:14px;
+  font-family:inherit;
+  outline:none;
+  transition:all 0.2s;
+  color-scheme: dark;
+}
+.manual-select:focus,
+.manual-date:focus{
+  border-color:rgba(255,159,77,0.5);
+  box-shadow:0 0 0 3px rgba(255,159,77,0.1);
+  background:rgba(0,0,0,0.55);
+}
+.manual-select option,
+.manual-select optgroup{
+  background:#1a0b2e;
+  color:var(--text);
+}
+
+.manual-actions{
+  display:flex; gap:10px; justify-content:flex-end;
+  margin-top:6px;
+}
+.manual-btn{
+  padding:10px 20px; border-radius:11px;
+  font-family:inherit; font-size:13px; font-weight:600;
+  cursor:pointer; transition:all 0.15s;
+  background:rgba(255,255,255,0.06);
+  border:1px solid var(--border);
+  color:var(--text);
+}
+.manual-btn:hover{ background:rgba(255,255,255,0.12); }
+.manual-btn.accent{
+  background:linear-gradient(135deg, var(--orange), #d97d29);
+  border-color:transparent;
+  color:#1a0d00;
+  box-shadow:0 4px 16px rgba(255,159,77,0.3);
+}
+.manual-btn.accent:hover{
+  transform:translateY(-1px);
+  box-shadow:0 6px 24px rgba(255,159,77,0.45);
+}
+
