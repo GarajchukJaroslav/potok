@@ -20,7 +20,6 @@ function goTo(index){
   if(index < 0 || index >= SCREENS.length) return;
   currentIndex = index;
   applyFlowTransform();
-  updateDots();
   const v = SCREENS[index];
   if(location.hash.slice(1) !== v){
     history.replaceState(null, '', '#' + v);
@@ -43,7 +42,6 @@ function init(){
   const startIdx = SCREENS.indexOf(startView);
   currentIndex = startIdx >= 0 ? startIdx : 0;
   applyFlowTransform();
-  updateDots();
 
   const goalInput = document.getElementById('goalInput');
   if(goalInput) goalInput.addEventListener('keydown', e => {
@@ -81,7 +79,6 @@ function init(){
     if(i >= 0 && i !== currentIndex){
       currentIndex = i;
       applyFlowTransform();
-      updateDots();
     }
   });
 
