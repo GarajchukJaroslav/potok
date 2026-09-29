@@ -35,7 +35,7 @@ function clickHabit(id){
     else h.log[t] = cur + 1;
   }
   store.set('habits', habits);
-  renderHabits();
+  Habits();
 }
 
 function decHabit(id){
@@ -46,14 +46,14 @@ function decHabit(id){
   if(cur <= 0) return;
   h.log[t] = cur - 1;
   store.set('habits', habits);
-  renderHabits();
+  Habits();
 }
 
 function delHabit(id){
   if(!confirm('Удалить привычку и всю её историю?')) return;
   habits = habits.filter(x => x.id !== id);
   store.set('habits', habits);
-  renderHabits();
+  Habits();
 }
 
 function habitProgress(h){
@@ -106,7 +106,7 @@ function weekStreak(h){
   return streak;
 }
 
-function renderMiniCal(h){
+function MiniCal(h){
   const today = new Date();
   today.setHours(0,0,0,0);
   const todayWd = (today.getDay() + 6) % 7;
@@ -131,7 +131,7 @@ function renderMiniCal(h){
   return html;
 }
 
-function renderHabits(){
+function Habits(){
   const list = document.getElementById('habitList');
   if(!list) return;
   list.innerHTML = '';
@@ -186,7 +186,7 @@ function renderHabits(){
     return p.current >= h.target;
   }).length;
   const sub = document.getElementById('habitSub');
-  if(sub) sub.textContent = total === 0 ? 'иду дальше каждый день' : `выполнено ${doneCount} из ${total}`;
+  if(sub) sub.textContent = total === 0 ? '' : `выполнено ${doneCount} из ${total}`;
 }
 
 /* ============ МОДАЛКА ИСТОРИИ ПРИВЫЧКИ ============ */
