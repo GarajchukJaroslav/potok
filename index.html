@@ -70,18 +70,13 @@
     <button class="nav-btn nav-down" onclick="goDown()" title="Дальше">↓</button>
   </section>
 
-  <!-- ЭКРАН 3: ЧЕКЛИСТ (заглушка) -->
+  <!-- ЭКРАН 3: ЧЕКЛИСТ -->
   <section class="screen" data-view="checklist">
     <div class="screen-inner">
       <div class="page-title">
         ✅ Чеклист
-        <span class="page-title-sub">Маркеры для анализа. Пока в разработке.</span>
       </div>
-      <div class="placeholder">
-        <div class="placeholder-icon">✅</div>
-        <div class="placeholder-title">Здесь будет Чеклист</div>
-        <div class="placeholder-sub">Маркеры, которые триггерят Анализ: пропустил 2 раза подряд, цель не сделал по причине, а не потому что не успел.</div>
-      </div>
+      <div class="list" id="checklistList"></div>
     </div>
     <button class="nav-btn nav-up" onclick="goUp()" title="Назад">↑</button>
     <button class="nav-btn nav-down" onclick="goDown()" title="Дальше">↓</button>
@@ -92,33 +87,13 @@
     <div class="screen-inner">
       <div class="page-title">
         🔍 Анализ → Действия
-        <span class="page-title-sub">Пиши проблему. Вытаскивай действие.</span>
       </div>
-      <div class="cols cols-2">
-        <div class="card">
-          <div class="card-head">
-            <div class="card-icon p2">💭</div>
-            <div>
-              <div class="card-title">Анализ</div>
-              <div class="card-sub">Пиши проблему. Найди, что с ней делать.</div>
-            </div>
-          </div>
-          <textarea class="thought-textarea" id="thoughtInput" placeholder="Что я не могу сделать? Почему? Что с этим делать?..."></textarea>
-          <button class="btn-primary" onclick="addThought()">Записать мысль</button>
-          <div class="list" id="thoughtList"></div>
-        </div>
 
-        <div class="card">
-          <div class="card-head">
-            <div class="card-icon p4">⚡</div>
-            <div>
-              <div class="card-title">Действия</div>
-              <div class="card-sub">Во что превратились мысли</div>
-            </div>
-          </div>
-          <div class="list" id="ruleList"></div>
-        </div>
-      </div>
+      <!-- Домашний экран анализа: события + история + действия -->
+      <div id="analysisHome" class="analysis-home"></div>
+
+      <!-- Фокусный экран: работа с конкретным событием -->
+      <div id="analysisFocus" class="analysis-focus" style="display:none;"></div>
     </div>
     <button class="nav-btn nav-up" onclick="goUp()" title="Назад">↑</button>
   </section>
@@ -151,10 +126,17 @@
   </div>
 </div>
 
+<!-- БЛОК СИСТЕМЫ -->
+<div class="block-overlay" id="blockOverlay">
+  <div class="block-card" id="blockCard"></div>
+</div>
+  
 <script src="core.js"></script>
 <script src="goals.js"></script>
 <script src="routine.js"></script>
 <script src="kanban.js"></script>
+<script src="checklist.js"></script>
+<script src="block.js"></script>
 <script src="analysis.js"></script>
 <script src="app.js"></script>
 </body>
