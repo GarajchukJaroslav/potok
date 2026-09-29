@@ -12,11 +12,9 @@
 
   <!-- ЭКРАН 1: ЦЕЛИ -->
   <section class="screen" data-view="goals">
-    <div class="screen-dots"></div>
     <div class="screen-inner">
       <div class="page-title no-back">
         🎯 Цели
-        <span class="page-title-sub">Глобальные цели. Шаги автоматически попадают в Канбан.</span>
       </div>
       <div class="goals-bar">
         <input id="goalInput" placeholder="Новая цель..." maxlength="200">
@@ -30,11 +28,9 @@
 
   <!-- ЭКРАН 2: РУТИНА / ЗОЖ -->
   <section class="screen" data-view="routine">
-    <div class="screen-dots"></div>
     <div class="screen-inner">
       <div class="page-title">
         💪 Рутина / ЗОЖ
-        <span class="page-title-sub">Привычки и канбан-доска задач.</span>
       </div>
       <div class="cols cols-routine">
         <div class="card">
@@ -42,7 +38,7 @@
             <div class="card-icon p1">🎯</div>
             <div style="flex:1">
               <div class="card-title">Привычки</div>
-              <div class="card-sub" id="habitSub">иду дальше каждый день</div>
+              <div class="card-sub" id="habitSub"></div>
             </div>
           </div>
           <div class="input-row">
@@ -64,7 +60,6 @@
             <div class="card-icon p2">📋</div>
             <div>
               <div class="card-title">Канбан</div>
-              <div class="card-sub">Задачи из шагов целей. Двигай стрелками.</div>
             </div>
           </div>
           <div class="kanban" id="kanban"></div>
@@ -77,7 +72,6 @@
 
   <!-- ЭКРАН 3: ЧЕКЛИСТ (заглушка) -->
   <section class="screen" data-view="checklist">
-    <div class="screen-dots"></div>
     <div class="screen-inner">
       <div class="page-title">
         ✅ Чеклист
@@ -95,7 +89,6 @@
 
   <!-- ЭКРАН 4: АНАЛИЗ → ДЕЙСТВИЯ -->
   <section class="screen" data-view="analysis">
-    <div class="screen-dots"></div>
     <div class="screen-inner">
       <div class="page-title">
         🔍 Анализ → Действия
