@@ -10,7 +10,6 @@ const store = {
   set(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
 };
 
-/* Дата старта системы: события раньше не генерируются */
 const SYSTEM_START_DATE = '2026-09-30';
 
 function dayStr(d){
@@ -90,10 +89,29 @@ function stepEffectiveStatus(step){
   return 'todo';
 }
 
-/* Форматирование даты для заголовка события */
 function fmtEventDate(dateStr){
   const d = new Date(dateStr + 'T12:00:00');
   return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
+}
+
+/* Универсальные метки источника события */
+function eventSourceLabel(source){
+  if(source === 'habit') return 'ЗОЖ';
+  if(source === 'kanban') return 'Канбан';
+  if(source === 'unwilling') return 'Не хочется';
+  return source;
+}
+function eventSourceIcon(source){
+  if(source === 'habit') return '🎯';
+  if(source === 'kanban') return '📋';
+  if(source === 'unwilling') return '💭';
+  return '•';
+}
+function eventSourceClass(source){
+  if(source === 'habit') return 'habit';
+  if(source === 'kanban') return 'kanban';
+  if(source === 'unwilling') return 'unwilling';
+  return '';
 }
 
 /* ============ ГЛОБАЛЬНЫЙ STATE ============ */
@@ -161,6 +179,39 @@ function refreshNumbers(){
   });
 }
 
+/* Собирает все leaf-задачи канбана — шаг без подшагов или каждый подшаг */
+function getLeafTasks(){
+  const tasks = [];
+  goals.forEach(g => {
+    if(g.done) return;
+    (g.steps || []).forEach(step => {
+      const subs = step.substeps || [];
+      if(subs.length === 0){
+        tasks.push({
+          key: `step:${g.id}:${step.id}`,
+          goalId: g.id,
+          stepId: step.id,
+          substepId: null,
+          text: step.text,
+          crumb: g.text
+        });
+      } else {
+        subs.forEach(ss => {
+          tasks.push({
+            key: `substep:${g.id}:${step.id}:${ss.id}`,
+            goalId: g.id,
+            stepId: step.id,
+            substepId: ss.id,
+            text: ss.text,
+            crumb: g.text + ' → ' + step.text
+          });
+        });
+      }
+    });
+  });
+  return tasks;
+}
+
 /* ============ ТАЙМЕРЫ ============ */
-const EVENT_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 часа
-const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;    // 15 минут
+const EVENT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;
