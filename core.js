@@ -10,6 +10,9 @@ const store = {
   set(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
 };
 
+/* Дата старта системы: события раньше не генерируются */
+const SYSTEM_START_DATE = '2026-09-30';
+
 function dayStr(d){
   const y = d.getFullYear();
   const m = String(d.getMonth()+1).padStart(2,'0');
@@ -55,7 +58,6 @@ function escapeHtml(s){
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
-/* Дедлайн: { text, diff, level } или null */
 function deadlineInfo(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr + 'T12:00:00');
@@ -73,14 +75,12 @@ function deadlineInfo(dateStr){
   return { text, diff, level };
 }
 
-/* Таймстамп дедлайна для сортировки (без дедлайна — в самый низ) */
 function deadlineTime(dl){
   if(!dl) return Infinity;
   const d = new Date(dl + 'T12:00:00');
   return isNaN(d) ? Infinity : d.getTime();
 }
 
-/* Эффективный статус шага: если есть подшаги — от них, иначе ручной */
 function stepEffectiveStatus(step){
   const subs = step.substeps || [];
   if(subs.length === 0) return step.status || 'todo';
@@ -90,11 +90,19 @@ function stepEffectiveStatus(step){
   return 'todo';
 }
 
+/* Форматирование даты для заголовка события */
+function fmtEventDate(dateStr){
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
+}
+
 /* ============ ГЛОБАЛЬНЫЙ STATE ============ */
 let habits  = store.get('habits', []);
 let thoughts = store.get('thoughts', []);
 let rules   = store.get('rules', []);
 let goals   = store.get('goals', []);
+let checklistEvents = store.get('checklistEvents', []);
+let systemBlock = store.get('systemBlock', { active:false, reason:null, blockedAt:null, events:[], resolution:null });
 
 /* ============ МИГРАЦИЯ ============ */
 habits.forEach(h => {
@@ -114,6 +122,13 @@ goals.forEach(g => {
       if(ss.status === undefined) ss.status = 'todo';
     });
   });
+});
+
+checklistEvents.forEach(e => {
+  if(e.status === undefined) e.status = 'new';
+  if(e.analysisStartedAt === undefined) e.analysisStartedAt = null;
+  if(e.analysisDeadline === undefined) e.analysisDeadline = null;
+  if(e.resolvedAt === undefined) e.resolvedAt = null;
 });
 
 /* ============ НУМЕРАЦИЯ ============ */
@@ -145,3 +160,7 @@ function refreshNumbers(){
     e.rules.forEach(r => { ruleNums[r.id] = num; });
   });
 }
+
+/* ============ ТАЙМЕРЫ ============ */
+const EVENT_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 часа
+const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;    // 15 минут
