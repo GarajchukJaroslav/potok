@@ -1,12 +1,13 @@
 /* ==================================================================
    ЭКРАН «АНАЛИЗ → ДЕЙСТВИЯ»
    Мысли создаются только из событий Чеклиста, с таймером 15 мин.
+   Для manual-событий есть опция «удалить без решения».
 ================================================================== */
 
 let activeAnalysisEventId = null;
 let analysisTicker = null;
 
-/* ---------- СТАРТ АНАЛИЗА ИЗ СОБЫТИЯ ---------- */
+/* ---------- СТАРТ / ПРОДОЛЖЕНИЕ ---------- */
 function startAnalysisFromEvent(eventId){
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e) return;
@@ -19,7 +20,6 @@ function startAnalysisFromEvent(eventId){
   store.set('checklistEvents', checklistEvents);
 
   activeAnalysisEventId = eventId;
-  // перейти на экран Анализа (индекс 3)
   if(typeof goTo === 'function') goTo(3);
   renderAnalysis();
   startAnalysisTicker();
@@ -39,7 +39,7 @@ function startAnalysisTicker(){
   analysisTicker = setInterval(() => {
     const el = document.getElementById('focusTimer');
     if(el) updateTimerDisplay(el);
-    checkSystemBlock();
+    if(typeof checkSystemBlock === 'function') checkSystemBlock();
   }, 1000);
 }
 
@@ -65,16 +65,11 @@ function updateTimerDisplay(el){
   else if(left < 5*60000) el.classList.add('warning');
 }
 
-/* ---------- РЕНДЕР ЭКРАНА ---------- */
+/* ---------- РЕНДЕР ---------- */
 function renderAnalysis(){
-  const view = document.getElementById('view');
-
-  // Если view не найден — значит мы в SPA и рендер идёт через секцию index.html
-  // Используем секцию с data-view="analysis" → ищем там контейнеры
   const isFocused = !!activeAnalysisEventId;
   const focusEl = document.getElementById('analysisFocus');
   const homeEl = document.getElementById('analysisHome');
-
   if(!focusEl || !homeEl) return;
 
   if(isFocused){
@@ -99,9 +94,14 @@ function renderAnalysis(){
 
 function renderAnalysisFocus(e){
   const focusEl = document.getElementById('analysisFocus');
-  const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : 'Канбан';
-  const sourceIcon = e.source === 'habit' ? '🎯' : '📋';
+  const isManual = e.source === 'manual';
+  const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё событие');
+  const sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
   const crumb = e.crumb ? `<div class="focus-event-crumb">${escapeHtml(e.crumb)}</div>` : '';
+
+  const cancelBtn = isManual
+    ? `<button class="btn-cancel-focus danger" onclick="deleteManualAnalysis()">Удалить без решения</button>`
+    : `<button class="btn-cancel-focus" onclick="cancelAnalysis()">Свернуть</button>`;
 
   focusEl.innerHTML = `
     <div class="focus-panel">
@@ -125,7 +125,7 @@ function renderAnalysisFocus(e){
         <div class="focus-field">
           <label class="focus-label">Анализ проблемы</label>
           <textarea class="focus-textarea" id="focusNote"
-            placeholder="Почему это произошло? Что помешало?"></textarea>
+            placeholder="Почему это произошло? Что помешало? Что смущает?"></textarea>
         </div>
         <div class="focus-field">
           <label class="focus-label">Гипотеза / действие</label>
@@ -135,7 +135,8 @@ function renderAnalysisFocus(e){
       </div>
 
       <div class="focus-actions">
-        <button class="btn-cancel-focus" onclick="cancelAnalysis()">Свернуть</button>
+        <button class="btn-cancel-focus" onclick="minimizeAnalysis()">Свернуть</button>
+        ${isManual ? `<button class="btn-cancel-focus danger" onclick="deleteManualAnalysis()">Удалить без решения</button>` : ''}
         <button class="btn-save-focus" onclick="saveAnalysis()">Сохранить и закрыть</button>
       </div>
     </div>
@@ -144,7 +145,6 @@ function renderAnalysisFocus(e){
   const timer = document.getElementById('focusTimer');
   if(timer) updateTimerDisplay(timer);
 
-  // Enter+Ctrl в textarea — сохранить
   ['focusNote','focusAction'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('keydown', ev => {
@@ -162,7 +162,9 @@ function renderAnalysisHome(){
   const eventsHtml = newEvents.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">✨</span>Нет активных событий</div>`
     : newEvents.map(e => {
-        const src = e.source === 'habit' ? '🎯 ЗОЖ' : '📋 Канбан';
+        const src = e.source === 'habit' ? '🎯 ЗОЖ'
+                  : e.source === 'kanban' ? '📋 Канбан'
+                  : '💭 Своё';
         const label = e.status === 'in_progress' ? 'Продолжить' : 'Принять меры';
         const click = e.status === 'in_progress'
           ? `resumeAnalysisFromEvent('${e.id}')`
@@ -179,7 +181,6 @@ function renderAnalysisHome(){
           </div>`;
       }).join('');
 
-  // История мыслей (read-only)
   const thoughtsHtml = thoughts.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">📝</span>Пока пусто</div>`
     : thoughts.map(t => {
@@ -243,7 +244,7 @@ function renderAnalysisHome(){
   `;
 }
 
-/* ---------- СОХРАНЕНИЕ ---------- */
+/* ---------- ДЕЙСТВИЯ ---------- */
 function saveAnalysis(){
   const noteEl = document.getElementById('focusNote');
   const actEl = document.getElementById('focusAction');
@@ -258,13 +259,11 @@ function saveAnalysis(){
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
 
-  // Проверка таймера
   if(e.analysisDeadline && Date.now() > e.analysisDeadline){
-    triggerBlock('analysis_timeout', [e.id]);
+    if(typeof triggerBlock === 'function') triggerBlock('analysis_timeout', [e.id]);
     return;
   }
 
-  // Создаём мысль
   const thought = {
     id: uid(),
     text: note,
@@ -274,7 +273,6 @@ function saveAnalysis(){
   };
   thoughts.unshift(thought);
 
-  // Создаём действие
   const rule = {
     id: uid(),
     text: action,
@@ -284,7 +282,6 @@ function saveAnalysis(){
   rules.unshift(rule);
   thought.rules.push(rule.id);
 
-  // Обновляем событие
   e.status = 'resolved';
   e.resolvedAt = Date.now();
   e.analysisId = thought.id;
@@ -302,8 +299,25 @@ function saveAnalysis(){
   if(typeof renderKanban === 'function') renderKanban();
 }
 
-function cancelAnalysis(){
-  // Сворачиваем, но таймер продолжает идти
+/* Свернуть фокус — таймер продолжает идти */
+function minimizeAnalysis(){
   activeAnalysisEventId = null;
   renderAnalysis();
+}
+
+/* Удалить manual-событие без решения */
+function deleteManualAnalysis(){
+  const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
+  if(!e) return;
+  if(e.source !== 'manual') return;
+  if(!confirm('Удалить событие без решения?')) return;
+
+  checklistEvents = checklistEvents.filter(x => x.id !== e.id);
+  store.set('checklistEvents', checklistEvents);
+
+  activeAnalysisEventId = null;
+  stopAnalysisTicker();
+
+  renderAnalysis();
+  renderChecklist();
 }
