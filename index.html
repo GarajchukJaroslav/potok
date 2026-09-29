@@ -16,10 +16,11 @@
     <div class="screen-inner">
       <div class="page-title no-back">
         🎯 Цели
-        <span class="page-title-sub">Глобальные большие цели. Разбивай на шаги и иди.</span>
+        <span class="page-title-sub">Глобальные цели. Шаги автоматически попадают в Канбан.</span>
       </div>
       <div class="goals-bar">
         <input id="goalInput" placeholder="Новая цель..." maxlength="200">
+        <input type="date" id="goalDeadline" class="date-input" title="Дедлайн цели">
         <button class="btn-add" onclick="addGoal()">+</button>
       </div>
       <div class="list" id="goalList"></div>
@@ -33,9 +34,9 @@
     <div class="screen-inner">
       <div class="page-title">
         💪 Рутина / ЗОЖ
-        <span class="page-title-sub">Ежедневные привычки и место под канбан-доску.</span>
+        <span class="page-title-sub">Привычки и канбан-доска задач.</span>
       </div>
-      <div class="cols cols-2">
+      <div class="cols cols-routine">
         <div class="card">
           <div class="card-head">
             <div class="card-icon p1">🎯</div>
@@ -63,14 +64,10 @@
             <div class="card-icon p2">📋</div>
             <div>
               <div class="card-title">Канбан</div>
-              <div class="card-sub">Место под доску задач</div>
+              <div class="card-sub">Задачи из шагов целей. Двигай стрелками.</div>
             </div>
           </div>
-          <div class="placeholder">
-            <div class="placeholder-icon">📋</div>
-            <div class="placeholder-title">Здесь будет Канбан</div>
-            <div class="placeholder-sub">Сделать → В процессе → Сделано. Появится отдельно.</div>
-          </div>
+          <div class="kanban" id="kanban"></div>
         </div>
       </div>
     </div>
@@ -164,6 +161,7 @@
 <script src="core.js"></script>
 <script src="goals.js"></script>
 <script src="routine.js"></script>
+<script src="kanban.js"></script>
 <script src="analysis.js"></script>
 <script src="app.js"></script>
 </body>
