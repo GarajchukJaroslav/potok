@@ -1,6 +1,5 @@
 /* ==================================================================
    STORE + UTILS + ГЛОБАЛЬНЫЙ STATE
-   Подключается ПЕРВЫМ. Все остальные скрипты используют эти функции.
 ================================================================== */
 
 const store = {
@@ -56,19 +55,46 @@ function escapeHtml(s){
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
+/* Возвращает инфу о дедлайне: { text, diff, level } или null */
+function deadlineInfo(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr + 'T12:00:00');
+  if(isNaN(d)) return null;
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const target = new Date(d);
+  target.setHours(0,0,0,0);
+  const diff = Math.round((target - today) / 86400000);
+  let level = 'future';
+  if(diff < 0) level = 'overdue';
+  else if(diff === 0) level = 'today';
+  else if(diff <= 3) level = 'soon';
+  const text = d.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
+  return { text, diff, level };
+}
+
 /* ============ ГЛОБАЛЬНЫЙ STATE ============ */
 let habits  = store.get('habits', []);
 let thoughts = store.get('thoughts', []);
 let rules   = store.get('rules', []);
 let goals   = store.get('goals', []);
 
-// нормализация старых данных привычек
+/* ============ МИГРАЦИЯ ============ */
 habits.forEach(h => {
   if(!h.log) h.log = {};
   if(!h.createdAt) h.createdAt = todayStr();
 });
 
-/* ============ НУМЕРАЦИЯ (Анализ / Действия) ============ */
+goals.forEach(g => {
+  if(g.deadline === undefined) g.deadline = null;
+  if(!Array.isArray(g.steps)) g.steps = [];
+  g.steps.forEach(s => {
+    if(s.deadline === undefined) s.deadline = null;
+    if(s.status === undefined) s.status = s.done ? 'done' : 'todo';
+  });
+});
+
+/* ============ НУМЕРАЦИЯ ============ */
 let thoughtNums = {};
 let ruleNums = {};
 
