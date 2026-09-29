@@ -1,13 +1,11 @@
 /* ==================================================================
-   ЧЕКЛИСТ — события из пропусков (привычки + канбан)
+   ЧЕКЛИСТ — автоматические события + свои «не хочу делать»
 ================================================================== */
 
-/* ---------- ГЕНЕРАЦИЯ СОБЫТИЙ ---------- */
+/* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ ---------- */
 function generateChecklistEvents(){
   const before = checklistEvents.length;
-  const today = todayStr();
 
-  // Привычки
   habits.forEach(h => {
     if(h.period === 'day'){
       const y = new Date(); y.setDate(y.getDate() - 1);
@@ -45,7 +43,6 @@ function generateChecklistEvents(){
     }
   });
 
-  // Канбан (leaf-задачи)
   goals.forEach(g => {
     if(g.done) return;
     (g.steps || []).forEach(step => {
@@ -108,62 +105,231 @@ function addEventIfMissing(source, refId, date, info){
   });
 }
 
-/* ---------- РЕНДЕР ---------- */
-function renderChecklist(){
-  generateChecklistEvents();
-  const list = document.getElementById('checklistList');
-  if(!list) return;
-  list.innerHTML = '';
+/* ---------- РУЧНЫЕ СОБЫТИЯ: «НЕ ХОЧУ ДЕЛАТЬ» ---------- */
 
-  if(checklistEvents.length === 0){
-    list.innerHTML = `
-      <div class="empty">
-        <span class="empty-icon">✨</span>
-        Пока чисто. Все привычки сделаны, задачи не просрочены.
-      </div>`;
+function openManualPicker(){
+  // Собираем список задач
+  const tasks = [];
+
+  // Привычки
+  habits.forEach(h => {
+    tasks.push({
+      value: 'habit:' + h.id,
+      group: 'ЗОЖ',
+      title: h.name,
+      crumb: null,
+      refType: 'habit',
+      refId: h.id
+    });
+  });
+
+  // Leaf-задачи из канбана
+  goals.forEach(g => {
+    if(g.done) return;
+    (g.steps || []).forEach(step => {
+      const subs = step.substeps || [];
+      if(subs.length === 0){
+        if(step.status === 'done') return;
+        tasks.push({
+          value: 'kanban:' + g.id + ':' + step.id,
+          group: 'Канбан',
+          title: step.text,
+          crumb: g.text,
+          refType: 'kanban',
+          refId: step.id
+        });
+      } else {
+        subs.forEach(ss => {
+          if(ss.status === 'done') return;
+          tasks.push({
+            value: 'kanban:' + g.id + ':' + step.id + ':' + ss.id,
+            group: 'Канбан',
+            title: ss.text,
+            crumb: g.text + ' → ' + step.text,
+            refType: 'kanban',
+            refId: step.id + ':' + ss.id
+          });
+        });
+      }
+    });
+  });
+
+  const sel = document.getElementById('manualTaskSelect');
+  if(!sel) return;
+
+  if(tasks.length === 0){
+    sel.innerHTML = `<option value="">— нет доступных задач —</option>`;
+  } else {
+    const byGroup = {};
+    tasks.forEach(t => {
+      if(!byGroup[t.group]) byGroup[t.group] = [];
+      byGroup[t.group].push(t);
+    });
+    let html = '<option value="">— выбери задачу —</option>';
+    Object.keys(byGroup).forEach(g => {
+      html += `<optgroup label="${g}">`;
+      byGroup[g].forEach(t => {
+        const label = t.crumb ? `${t.title}  (${t.crumb})` : t.title;
+        const escaped = escapeHtml(label);
+        const crumbEsc = t.crumb ? escapeHtml(t.crumb) : '';
+        html += `<option value="${t.value}" data-ref-type="${t.refType}" data-ref-id="${t.refId}" data-title="${escapeHtml(t.title)}" data-crumb="${crumbEsc}">${escaped}</option>`;
+      });
+      html += '</optgroup>';
+    });
+    sel.innerHTML = html;
+  }
+
+  // Дата по умолчанию — сегодня
+  const dateInp = document.getElementById('manualDate');
+  if(dateInp){
+    dateInp.value = todayStr();
+    if(dateInp.min !== SYSTEM_START_DATE) dateInp.min = SYSTEM_START_DATE;
+  }
+
+  document.getElementById('manualOverlay').classList.add('open');
+}
+
+function closeManualPicker(){
+  document.getElementById('manualOverlay').classList.remove('open');
+}
+
+function createManualEvent(){
+  const sel = document.getElementById('manualTaskSelect');
+  const dateInp = document.getElementById('manualDate');
+  if(!sel || !dateInp) return;
+
+  const value = sel.value;
+  const date = dateInp.value;
+
+  if(!value){ alert('Выбери задачу'); sel.focus(); return; }
+  if(!date){ alert('Укажи дату'); dateInp.focus(); return; }
+  if(date < SYSTEM_START_DATE){
+    alert('Дата раньше старта системы');
     return;
   }
 
-  // сортировка: новые наверх, потом по дате
-  const sorted = [...checklistEvents].sort((a,b) => {
+  const opt = sel.options[sel.selectedIndex];
+  const refType = opt.dataset.refType;
+  const refId = opt.dataset.refId;
+  const title = opt.dataset.title;
+  const crumb = opt.dataset.crumb || null;
+
+  // Проверка на дубликат (та же задача + та же дата)
+  const dup = checklistEvents.find(e =>
+    e.source === 'manual' &&
+    e.refType === refType &&
+    e.refId === refId &&
+    e.date === date &&
+    e.status !== 'resolved'
+  );
+  if(dup){
+    alert('Такое событие уже есть');
+    return;
+  }
+
+  checklistEvents.push({
+    id: uid(),
+    date,
+    source: 'manual',
+    refType,
+    refId,
+    title,
+    detail: 'не хочется делать',
+    crumb,
+    createdAt: Date.now(),
+    status: 'new',
+    analysisId: null,
+    analysisStartedAt: null,
+    analysisDeadline: null,
+    resolvedAt: null,
+    solution: null
+  });
+  store.set('checklistEvents', checklistEvents);
+
+  closeManualPicker();
+  renderChecklist();
+}
+
+/* ---------- РЕНДЕР ---------- */
+function renderChecklist(){
+  generateChecklistEvents();
+
+  const autoList = document.getElementById('checklistList');
+  const manualList = document.getElementById('checklistManualList');
+  if(!autoList || !manualList) return;
+
+  autoList.innerHTML = '';
+  manualList.innerHTML = '';
+
+  const auto = checklistEvents.filter(e => e.source !== 'manual');
+  const manual = checklistEvents.filter(e => e.source === 'manual');
+
+  // Сортировка: активные наверх
+  const sortFn = (a,b) => {
     const aDone = a.status === 'resolved' ? 1 : 0;
     const bDone = b.status === 'resolved' ? 1 : 0;
     if(aDone !== bDone) return aDone - bDone;
     return b.date.localeCompare(a.date);
-  });
+  };
+  auto.sort(sortFn);
+  manual.sort(sortFn);
 
-  sorted.forEach(e => {
-    const el = document.createElement('div');
-    el.className = 'checklist-event';
-    if(e.status === 'resolved') el.classList.add('resolved');
-    if(e.status === 'in_progress') el.classList.add('in-progress');
+  // AUTO
+  if(auto.length === 0){
+    autoList.innerHTML = `
+      <div class="empty">
+        <span class="empty-icon">✨</span>
+        Пока чисто. Все привычки сделаны, задачи не просрочены.
+      </div>`;
+  } else {
+    auto.forEach(e => autoList.appendChild(buildEventCard(e)));
+  }
 
-    const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : 'Канбан';
-    const sourceIcon = e.source === 'habit' ? '🎯' : '📋';
+  // MANUAL
+  if(manual.length === 0){
+    manualList.innerHTML = `
+      <div class="empty" style="padding:30px 20px;">
+        <span class="empty-icon" style="font-size:24px;">💭</span>
+        Пусто.<br>
+        <span style="font-size:12px;">Жми + если что-то не хочется делать</span>
+      </div>`;
+  } else {
+    manual.forEach(e => manualList.appendChild(buildEventCard(e, true)));
+  }
+}
 
-    let actionHtml = '';
-    if(e.status === 'new'){
-      actionHtml = `<button class="btn-take-action" onclick="startAnalysisFromEvent('${e.id}')">Принять меры</button>`;
-    } else if(e.status === 'in_progress'){
-      actionHtml = `<button class="btn-take-action in-progress" onclick="resumeAnalysisFromEvent('${e.id}')">Продолжить анализ →</button>`;
-    } else {
-      actionHtml = `<div class="event-resolved-badge">✓ Решено</div>`;
-    }
+function buildEventCard(e, isManual){
+  const el = document.createElement('div');
+  el.className = 'checklist-event';
+  if(isManual) el.classList.add('manual');
+  if(e.status === 'resolved') el.classList.add('resolved');
+  if(e.status === 'in_progress') el.classList.add('in-progress');
 
-    const crumbHtml = e.crumb ? `<div class="event-crumb">${escapeHtml(e.crumb)}</div>` : '';
-    const solutionHtml = e.solution ? `<div class="event-solution">Решение: ${escapeHtml(e.solution)}</div>` : '';
+  const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё');
+  const sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
 
-    el.innerHTML = `
-      <div class="event-head">
-        <div class="event-date">${fmtEventDate(e.date)}</div>
-        <div class="event-source ${e.source}">${sourceIcon} ${sourceLabel}</div>
-      </div>
-      <div class="event-title">${escapeHtml(e.title)}</div>
-      ${crumbHtml}
-      <div class="event-detail">${escapeHtml(e.detail)}</div>
-      ${solutionHtml}
-      <div class="event-foot">${actionHtml}</div>
-    `;
-    list.appendChild(el);
-  });
+  let actionHtml = '';
+  if(e.status === 'new'){
+    actionHtml = `<button class="btn-take-action" onclick="startAnalysisFromEvent('${e.id}')">Принять меры</button>`;
+  } else if(e.status === 'in_progress'){
+    actionHtml = `<button class="btn-take-action in-progress" onclick="resumeAnalysisFromEvent('${e.id}')">Продолжить анализ →</button>`;
+  } else {
+    actionHtml = `<div class="event-resolved-badge">✓ Решено</div>`;
+  }
+
+  const crumbHtml = e.crumb ? `<div class="event-crumb">${escapeHtml(e.crumb)}</div>` : '';
+  const solutionHtml = e.solution ? `<div class="event-solution">Решение: ${escapeHtml(e.solution)}</div>` : '';
+
+  el.innerHTML = `
+    <div class="event-head">
+      <div class="event-date">${fmtEventDate(e.date)}</div>
+      <div class="event-source ${e.source}">${sourceIcon} ${sourceLabel}</div>
+    </div>
+    <div class="event-title">${escapeHtml(e.title)}</div>
+    ${crumbHtml}
+    <div class="event-detail">${escapeHtml(e.detail)}</div>
+    ${solutionHtml}
+    <div class="event-foot">${actionHtml}</div>
+  `;
+  return el;
 }
