@@ -16,14 +16,6 @@ function applyFlowTransform(){
   flow.style.transform = `translateY(${-currentIndex * window.innerHeight}px)`;
 }
 
-function updateDots(){
-  document.querySelectorAll('.screen-dots').forEach(dots => {
-    dots.innerHTML = SCREENS.map((_, j) =>
-      `<span class="${j === currentIndex ? 'active' : ''}"></span>`
-    ).join('');
-  });
-}
-
 function goTo(index){
   if(index < 0 || index >= SCREENS.length) return;
   currentIndex = index;
