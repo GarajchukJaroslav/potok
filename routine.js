@@ -35,7 +35,7 @@ function clickHabit(id){
     else h.log[t] = cur + 1;
   }
   store.set('habits', habits);
-  Habits();
+  renderHabits();
 }
 
 function decHabit(id){
@@ -46,14 +46,14 @@ function decHabit(id){
   if(cur <= 0) return;
   h.log[t] = cur - 1;
   store.set('habits', habits);
-  Habits();
+  renderHabits();
 }
 
 function delHabit(id){
   if(!confirm('Удалить привычку и всю её историю?')) return;
   habits = habits.filter(x => x.id !== id);
   store.set('habits', habits);
-  Habits();
+  renderHabits();
 }
 
 function habitProgress(h){
@@ -106,7 +106,7 @@ function weekStreak(h){
   return streak;
 }
 
-function MiniCal(h){
+function renderMiniCal(h){
   const today = new Date();
   today.setHours(0,0,0,0);
   const todayWd = (today.getDay() + 6) % 7;
@@ -131,7 +131,7 @@ function MiniCal(h){
   return html;
 }
 
-function Habits(){
+function renderHabits(){
   const list = document.getElementById('habitList');
   if(!list) return;
   list.innerHTML = '';
@@ -183,7 +183,7 @@ function Habits(){
   const total = habits.length;
   const doneCount = habits.filter(h => {
     const p = habitProgress(h);
-    return p.current >= h.target;
+    return p.current >= p.target;
   }).length;
   const sub = document.getElementById('habitSub');
   if(sub) sub.textContent = total === 0 ? '' : `выполнено ${doneCount} из ${total}`;
