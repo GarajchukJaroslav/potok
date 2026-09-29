@@ -111,8 +111,7 @@ function toggleStep(goalId, stepId){
   if(!g) return;
   const s = g.steps.find(x => x.id === stepId);
   if(!s) return;
-  // если шаг-контейнер (есть подшаги) — клик не работает
-  if(s.substeps && s.substeps.length > 0) return;
+  if(s.substeps && s.substeps.length > 0) return; // контейнер — не кликается
   if(s.status === 'done'){
     s.status = s.lastStatus || 'todo';
   } else {
@@ -128,6 +127,9 @@ function delStep(goalId, stepId){
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   g.steps = g.steps.filter(x => x.id !== stepId);
+  // почистим expandedSteps
+  const key = goalId + ':' + stepId;
+  if(expandedSteps.has(key)){ expandedSteps.delete(key); store.set('expandedSteps', [...expandedSteps]); }
   store.set('goals', goals);
   renderGoalList();
   if(typeof renderKanban === 'function') renderKanban();
@@ -145,6 +147,8 @@ function setStepDeadline(goalId, stepId, value){
   if(typeof renderKanban === 'function') renderKanban();
 }
 
+/* Открыть/закрыть блок подшагов. Работает и для leaf-шага (для добавления первого),
+   и для контейнера (для сворачивания). */
 function toggleExpandStep(goalId, stepId){
   const key = goalId + ':' + stepId;
   if(expandedSteps.has(key)) expandedSteps.delete(key);
@@ -154,18 +158,6 @@ function toggleExpandStep(goalId, stepId){
   setTimeout(() => {
     const inp = document.querySelector(`[data-substep-input="${key}"]`);
     if(inp && expandedSteps.has(key)) inp.focus();
-  }, 30);
-}
-
-/* Превращает leaf-шаг в контейнер (создаёт первый подшаг через инпут) */
-function openAddSubstep(goalId, stepId){
-  const key = goalId + ':' + stepId;
-  expandedSteps.add(key);
-  store.set('expandedSteps', [...expandedSteps]);
-  renderGoalList();
-  setTimeout(() => {
-    const inp = document.querySelector(`[data-substep-input="${key}"]`);
-    if(inp) inp.focus();
   }, 30);
 }
 
@@ -289,8 +281,8 @@ function renderGoalList(){
         <div class="goal-body-inner">
           ${stepsHtml}
           <div class="step-add">
-            <input data-step-input="${g.id}" placeholder="Новый шаг..." maxlength="200">
-            <input type="date" data-step-deadline="${g.id}" title="Дедлайн (обязательно)">
+            <input name="step-text-${g.id}" data-step-input="${g.id}" placeholder="Новый шаг..." maxlength="200">
+            <input name="step-dl-${g.id}" type="date" data-step-deadline="${g.id}" title="Дедлайн (обязательно)">
             <button onclick="event.stopPropagation(); addStep('${g.id}')">+</button>
           </div>
         </div>
@@ -329,48 +321,56 @@ function renderGoalList(){
 
 function renderStep(goalId, s){
   const subs = s.substeps || [];
-  const isContainer = subs.length > 0;
+  const hasSubs = subs.length > 0;
   const effStatus = stepEffectiveStatus(s);
   const stepKey = goalId + ':' + s.id;
   const isOpen = expandedSteps.has(stepKey);
 
   const dlValue = s.deadline || '';
-  const dateInput = `<input type="date" class="step-date" value="${dlValue}"
+  const dateInput = `<input name="step-date-${s.id}" type="date" class="step-date" value="${dlValue}"
     onclick="event.stopPropagation()"
     onchange="setStepDeadline('${goalId}','${s.id}', this.value)">`;
 
-  if(isContainer){
-    const subsHtml = subs.map(ss => renderSubstep(goalId, s.id, ss)).join('');
-    const closedCount = subs.filter(x => x.status === 'done').length;
+  const subsHtml = subs.map(ss => renderSubstep(goalId, s.id, ss)).join('');
+  const closedCount = subs.filter(x => x.status === 'done').length;
 
-    return `
-      <div class="step step-container ${effStatus === 'done' ? 'done' : ''}">
-        <div class="step-check step-auto ${effStatus}" title="статус считается от подшагов"></div>
-        <div class="step-text">${escapeHtml(s.text)}</div>
-        <span class="step-count">${closedCount}/${subs.length}</span>
-        ${dateInput}
-        <button class="step-expand${isOpen ? ' open' : ''}" onclick="event.stopPropagation(); toggleExpandStep('${goalId}','${s.id}')" title="подшаги">▼</button>
-        <button class="step-del" onclick="event.stopPropagation(); delStep('${goalId}','${s.id}')" title="удалить">✕</button>
+  const checkEl = hasSubs
+    ? `<div class="step-check step-auto ${effStatus}" title="статус считается от подшагов"></div>`
+    : `<button class="step-check${s.status === 'done' ? ' done' : ''}" onclick="event.stopPropagation(); toggleStep('${goalId}','${s.id}')"></button>`;
+
+  const countEl = hasSubs ? `<span class="step-count">${closedCount}/${subs.length}</span>` : '';
+
+  const toggleBtn = hasSubs
+    ? `<button class="step-expand${isOpen ? ' open' : ''}" onclick="event.stopPropagation(); toggleExpandStep('${goalId}','${s.id}')" title="подшаги">▼</button>`
+    : `<button class="step-add-sub${isOpen ? ' open' : ''}" onclick="event.stopPropagation(); toggleExpandStep('${goalId}','${s.id}')" title="Добавить подшаги">+↳</button>`;
+
+  const stepClass = [
+    'step',
+    hasSubs ? 'step-container' : '',
+    (!hasSubs && s.status === 'done') ? 'done' : '',
+    (hasSubs && effStatus === 'done') ? 'done' : ''
+  ].filter(Boolean).join(' ');
+
+  const subsBlock = isOpen ? `
+    <div class="substeps-wrap open">
+      ${subsHtml}
+      <div class="substep-add">
+        <input name="substep-text-${stepKey}" data-substep-input="${stepKey}" placeholder="Новый подшаг..." maxlength="200">
+        <input name="substep-dl-${stepKey}" type="date" data-substep-deadline="${stepKey}" title="Дедлайн (обязательно)">
+        <button onclick="event.stopPropagation(); addSubstep('${goalId}','${s.id}')">+</button>
       </div>
-      <div class="substeps-wrap${isOpen ? ' open' : ''}">
-        ${subsHtml}
-        <div class="substep-add">
-          <input data-substep-input="${stepKey}" placeholder="Новый подшаг..." maxlength="200">
-          <input type="date" data-substep-deadline="${stepKey}" title="Дедлайн (обязательно)">
-          <button onclick="event.stopPropagation(); addSubstep('${goalId}','${s.id}')">+</button>
-        </div>
-      </div>`;
-  }
+    </div>` : '';
 
-  // leaf-шаг
   return `
-    <div class="step${s.status === 'done' ? ' done' : ''}">
-      <button class="step-check${s.status === 'done' ? ' done' : ''}" onclick="event.stopPropagation(); toggleStep('${goalId}','${s.id}')"></button>
+    <div class="${stepClass}">
+      ${checkEl}
       <div class="step-text">${escapeHtml(s.text)}</div>
+      ${countEl}
       ${dateInput}
-      <button class="step-add-sub" onclick="event.stopPropagation(); openAddSubstep('${goalId}','${s.id}')" title="Добавить подшаги">+↳</button>
+      ${toggleBtn}
       <button class="step-del" onclick="event.stopPropagation(); delStep('${goalId}','${s.id}')" title="удалить">✕</button>
-    </div>`;
+    </div>
+    ${subsBlock}`;
 }
 
 function renderSubstep(goalId, stepId, ss){
@@ -380,7 +380,7 @@ function renderSubstep(goalId, stepId, ss){
     <div class="substep${done ? ' done' : ''}">
       <button class="substep-check${done ? ' done' : ''}" onclick="event.stopPropagation(); toggleSubstep('${goalId}','${stepId}','${ss.id}')"></button>
       <div class="substep-text">${escapeHtml(ss.text)}</div>
-      <input type="date" class="substep-date" value="${dlValue}"
+      <input name="substep-date-${ss.id}" type="date" class="substep-date" value="${dlValue}"
         onclick="event.stopPropagation()"
         onchange="setSubstepDeadline('${goalId}','${stepId}','${ss.id}', this.value)">
       <button class="substep-del" onclick="event.stopPropagation(); delSubstep('${goalId}','${stepId}','${ss.id}')" title="удалить">✕</button>
