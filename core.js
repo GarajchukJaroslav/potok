@@ -55,7 +55,7 @@ function escapeHtml(s){
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 
-/* Возвращает инфу о дедлайне: { text, diff, level } или null */
+/* Дедлайн: { text, diff, level } или null */
 function deadlineInfo(dateStr){
   if(!dateStr) return null;
   const d = new Date(dateStr + 'T12:00:00');
@@ -71,6 +71,23 @@ function deadlineInfo(dateStr){
   else if(diff <= 3) level = 'soon';
   const text = d.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
   return { text, diff, level };
+}
+
+/* Таймстамп дедлайна для сортировки (без дедлайна — в самый низ) */
+function deadlineTime(dl){
+  if(!dl) return Infinity;
+  const d = new Date(dl + 'T12:00:00');
+  return isNaN(d) ? Infinity : d.getTime();
+}
+
+/* Эффективный статус шага: если есть подшаги — от них, иначе ручной */
+function stepEffectiveStatus(step){
+  const subs = step.substeps || [];
+  if(subs.length === 0) return step.status || 'todo';
+  const statuses = subs.map(s => s.status || 'todo');
+  if(statuses.every(s => s === 'done')) return 'done';
+  if(statuses.some(s => s === 'done' || s === 'doing')) return 'doing';
+  return 'todo';
 }
 
 /* ============ ГЛОБАЛЬНЫЙ STATE ============ */
@@ -91,6 +108,11 @@ goals.forEach(g => {
   g.steps.forEach(s => {
     if(s.deadline === undefined) s.deadline = null;
     if(s.status === undefined) s.status = s.done ? 'done' : 'todo';
+    if(!Array.isArray(s.substeps)) s.substeps = [];
+    s.substeps.forEach(ss => {
+      if(ss.deadline === undefined) ss.deadline = null;
+      if(ss.status === undefined) ss.status = 'todo';
+    });
   });
 });
 
