@@ -101,7 +101,7 @@ let rules   = store.get('rules', []);
 let goals   = store.get('goals', []);
 let checklistEvents = store.get('checklistEvents', []);
 let systemBlock = store.get('systemBlock', { active:false, reason:null, blockedAt:null, events:[], resolution:null });
-let manualExpanded = store.get('manualExpanded', { want: true, result: true });
+let currentManualType = store.get('manualCurrentType', 'want');
 
 /* ============ МИГРАЦИЯ ============ */
 habits.forEach(h => {
