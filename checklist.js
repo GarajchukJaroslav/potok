@@ -1,5 +1,5 @@
 /* ==================================================================
-   ЧЕКЛИСТ — авто-события + свои события + merged
+   ЧЕКЛИСТ — авто-события + свои события (дропдаун) + merged
 ================================================================== */
 
 /* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ ---------- */
@@ -108,28 +108,17 @@ function addEventIfMissing(source, refId, date, info){
   });
 }
 
-/* ---------- РУЧНЫЕ СОБЫТИЯ ---------- */
-let currentManualType = 'want';
-
-function toggleManualSection(type){
-  manualExpanded[type] = !manualExpanded[type];
-  store.set('manualExpanded', manualExpanded);
-  updateManualSectionsVisibility();
-}
-
-function updateManualSectionsVisibility(){
-  ['want','result'].forEach(t => {
-    const body = document.getElementById(t === 'want' ? 'manualBodyWant' : 'manualBodyResult');
-    const chev = document.getElementById(t === 'want' ? 'chevWant' : 'chevResult');
-    if(body) body.style.display = manualExpanded[t] ? 'block' : 'none';
-    if(chev) chev.classList.toggle('collapsed', !manualExpanded[t]);
-  });
-}
-
-function openManualPicker(type){
+/* ---------- ПЕРЕКЛЮЧАТЕЛЬ КАТЕГОРИИ ---------- */
+function switchManualType(type){
   currentManualType = type;
+  store.set('manualCurrentType', type);
+  renderChecklist();
+}
 
-  // Заголовки модалки
+/* ---------- РУЧНЫЕ СОБЫТИЯ ---------- */
+function openManualPicker(){
+  const type = currentManualType;
+
   const titleEl = document.getElementById('manualModalTitle');
   const labelEl = document.getElementById('manualTaskLabel');
   if(titleEl) titleEl.textContent = type === 'result'
@@ -142,7 +131,6 @@ function openManualPicker(type){
   const tasks = [];
 
   if(type === 'want'){
-    // Все привычки
     habits.forEach(h => {
       tasks.push({
         value: 'habit:' + h.id,
@@ -155,7 +143,6 @@ function openManualPicker(type){
       });
     });
 
-    // Leaf-задачи из канбана (любые, не закрытые)
     goals.forEach(g => {
       if(g.done) return;
       (g.steps || []).forEach(step => {
@@ -188,12 +175,9 @@ function openManualPicker(type){
       });
     });
   } else {
-    // type === 'result'
-    // Только ВЫПОЛНЕННЫЕ leaf-шаги (без подшагов, status='done')
-    // Невыполненные показываем как disabled, но они должны быть видны
+    // result — только leaf-шаги (без подшагов), все: выполненные доступны, невыполненные disabled
     goals.forEach(g => {
       (g.steps || []).forEach(step => {
-        // Пропускаем шаги-контейнеры (с подшагами)
         const subs = step.substeps || [];
         if(subs.length > 0) return;
 
@@ -267,9 +251,10 @@ function createManualEvent(){
 
   const value = sel.value;
   const date = dateInp.value;
+  const type = currentManualType;
 
   if(!value){
-    alert(currentManualType === 'result' ? 'Выбери выполненный шаг' : 'Выбери задачу');
+    alert(type === 'result' ? 'Выбери выполненный шаг' : 'Выбери задачу');
     sel.focus(); return;
   }
   if(!date){ alert('Укажи дату'); dateInp.focus(); return; }
@@ -285,7 +270,7 @@ function createManualEvent(){
 
   const dup = checklistEvents.find(e =>
     e.source === 'manual' &&
-    e.manualType === currentManualType &&
+    e.manualType === type &&
     e.refType === refType &&
     e.refId === refId &&
     e.date === date &&
@@ -297,11 +282,11 @@ function createManualEvent(){
     id: uid(),
     date,
     source: 'manual',
-    manualType: currentManualType,
+    manualType: type,
     refType,
     refId,
     title,
-    detail: currentManualType === 'result'
+    detail: type === 'result'
       ? 'результат не соответствует ожиданию'
       : 'не хочется делать',
     crumb,
@@ -327,30 +312,30 @@ function renderChecklist(){
   generateChecklistEvents();
 
   const autoList = document.getElementById('checklistList');
-  const wantList = document.getElementById('checklistManualListWant');
-  const resultList = document.getElementById('checklistManualListResult');
+  const manualList = document.getElementById('checklistManualList');
+  const select = document.getElementById('sideSelect');
+  const addBtn = document.getElementById('sideAddBtn');
 
-  if(autoList) autoList.innerHTML = '';
-  if(wantList) wantList.innerHTML = '';
-  if(resultList) resultList.innerHTML = '';
-
-  const visible = checklistEvents.filter(e => e.status !== 'merged');
-
-  const auto = visible.filter(e => e.source !== 'manual');
-  const want = visible.filter(e => e.source === 'manual' && e.manualType === 'want');
-  const result = visible.filter(e => e.source === 'manual' && e.manualType === 'result');
-
-  const sortFn = (a,b) => {
-    const aDone = a.status === 'resolved' ? 1 : 0;
-    const bDone = b.status === 'resolved' ? 1 : 0;
-    if(aDone !== bDone) return aDone - bDone;
-    return b.date.localeCompare(a.date);
-  };
-  auto.sort(sortFn);
-  want.sort(sortFn);
-  result.sort(sortFn);
+  // синхронизируем селект с текущим типом
+  if(select && select.value !== currentManualType){
+    select.value = currentManualType;
+  }
+  // перекрашиваем кнопку + под тему
+  if(addBtn){
+    addBtn.classList.toggle('result', currentManualType === 'result');
+  }
 
   if(autoList){
+    autoList.innerHTML = '';
+    const auto = checklistEvents
+      .filter(e => e.status !== 'merged' && e.source !== 'manual')
+      .sort((a,b) => {
+        const aDone = a.status === 'resolved' ? 1 : 0;
+        const bDone = b.status === 'resolved' ? 1 : 0;
+        if(aDone !== bDone) return aDone - bDone;
+        return b.date.localeCompare(a.date);
+      });
+
     if(auto.length === 0){
       autoList.innerHTML = `
         <div class="empty">
@@ -362,31 +347,34 @@ function renderChecklist(){
     }
   }
 
-  if(wantList){
-    if(want.length === 0){
-      wantList.innerHTML = `
-        <div class="empty" style="padding:24px 16px;">
-          <span class="empty-icon" style="font-size:22px;">💭</span>
-          <span style="font-size:12px;">Пусто</span>
+  if(manualList){
+    manualList.innerHTML = '';
+    const items = checklistEvents
+      .filter(e => e.status !== 'merged'
+        && e.source === 'manual'
+        && e.manualType === currentManualType)
+      .sort((a,b) => {
+        const aDone = a.status === 'resolved' ? 1 : 0;
+        const bDone = b.status === 'resolved' ? 1 : 0;
+        if(aDone !== bDone) return aDone - bDone;
+        return b.date.localeCompare(a.date);
+      });
+
+    if(items.length === 0){
+      const icon = currentManualType === 'result' ? '🎯' : '💭';
+      const hint = currentManualType === 'result'
+        ? 'Результат шага не оправдал ожиданий? Жми +'
+        : 'Что-то не хочется делать? Жми +';
+      manualList.innerHTML = `
+        <div class="empty" style="padding:30px 20px;">
+          <span class="empty-icon" style="font-size:24px;">${icon}</span>
+          Пусто.<br>
+          <span style="font-size:12px;">${hint}</span>
         </div>`;
     } else {
-      want.forEach(e => wantList.appendChild(buildEventCard(e)));
+      items.forEach(e => manualList.appendChild(buildEventCard(e)));
     }
   }
-
-  if(resultList){
-    if(result.length === 0){
-      resultList.innerHTML = `
-        <div class="empty" style="padding:24px 16px;">
-          <span class="empty-icon" style="font-size:22px;">🎯</span>
-          <span style="font-size:12px;">Пусто</span>
-        </div>`;
-    } else {
-      result.forEach(e => resultList.appendChild(buildEventCard(e)));
-    }
-  }
-
-  updateManualSectionsVisibility();
 }
 
 function buildEventCard(e){
