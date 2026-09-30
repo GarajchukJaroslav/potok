@@ -72,7 +72,6 @@ function toggleMergeSelect(eventId, checked){
   if(checked) selectedForMerge.add(eventId);
   else selectedForMerge.delete(eventId);
   renderMergePanel();
-  // перерисовать home — чтобы чекбокс отражал состояние
   updateHomeCheckboxes();
 }
 
@@ -117,7 +116,7 @@ function createMergedEvent(){
   const children = ids
     .map(id => checklistEvents.find(x => x.id === id))
     .filter(Boolean)
-    .filter(e => e.status === 'new'); // только new
+    .filter(e => e.status === 'new');
 
   if(children.length < 2){
     alert('Можно объединять только новые события');
@@ -143,10 +142,10 @@ function createMergedEvent(){
     resolvedAt: null,
     solution: null,
     childrenIds: children.map(c => c.id),
-    mergedIntoId: null
+    mergedIntoId: null,
+    manualType: null
   };
 
-  // дети -> status: 'merged'
   children.forEach(c => {
     c.status = 'merged';
     c.mergedIntoId = merged.id;
@@ -195,7 +194,8 @@ function renderAnalysis(){
 function renderAnalysisFocus(e){
   const focusEl = document.getElementById('analysisFocus');
   const isMerged = e.source === 'merged';
-  const isManual = e.source === 'manual';
+  const isManualWant = e.source === 'manual' && e.manualType === 'want';
+  const isManualResult = e.source === 'manual' && e.manualType === 'result';
 
   let headerHtml = '';
 
@@ -203,7 +203,8 @@ function renderAnalysisFocus(e){
     const kids = getMergedChildren(e);
     const kidsHtml = kids.map(k => {
       const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : '💭');
-      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'kanban' ? 'Канбан' : 'Своё');
+      const label = k.source === 'habit' ? 'ЗОЖ'
+                  : (k.source === 'kanban' ? 'Канбан' : 'Своё');
       const crumb = k.crumb ? ` <span class="focus-kid-crumb">· ${escapeHtml(k.crumb)}</span>` : '';
       return `<div class="focus-kid"><span class="focus-kid-icon">${icon}</span><span class="focus-kid-label">${label}</span><span class="focus-kid-title">${escapeHtml(k.title)}</span>${crumb}</div>`;
     }).join('');
@@ -216,8 +217,12 @@ function renderAnalysisFocus(e){
       <div class="focus-kids">${kidsHtml}</div>
     `;
   } else {
-    const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё');
-    const sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
+    let sourceLabel, sourceIcon;
+    if(e.source === 'habit'){ sourceLabel = 'ЗОЖ'; sourceIcon = '🎯'; }
+    else if(e.source === 'kanban'){ sourceLabel = 'Канбан'; sourceIcon = '📋'; }
+    else if(isManualResult){ sourceLabel = 'Результат'; sourceIcon = '🎯'; }
+    else { sourceLabel = 'Своё'; sourceIcon = '💭'; }
+
     const crumb = e.crumb ? `<div class="focus-event-crumb">${escapeHtml(e.crumb)}</div>` : '';
     headerHtml = `
       <div class="focus-event-meta">
@@ -230,10 +235,15 @@ function renderAnalysisFocus(e){
     `;
   }
 
-  const canDelete = (isManual || (isMerged && isAllManualMerge(e)));
+  // Удалить без решения можно ТОЛЬКО для manual-want и merged, где все дети want.
+  const canDelete = isManualWant || (isMerged && isAllManualDeletableMerge(e));
+
+  const placeholder = isManualResult
+    ? 'Что ты ожидал? Что получилось? Где расхождение?'
+    : 'Почему это произошло? Что общего между этими событиями?';
 
   focusEl.innerHTML = `
-    <div class="focus-panel">
+    <div class="focus-panel${isManualResult ? ' focus-panel-result' : ''}">
       <div class="focus-head">
         <div class="focus-event-info">${headerHtml}</div>
         <div class="focus-timer-wrap">
@@ -245,8 +255,7 @@ function renderAnalysisFocus(e){
       <div class="focus-body">
         <div class="focus-field">
           <label class="focus-label">Анализ проблемы</label>
-          <textarea class="focus-textarea" id="focusNote"
-            placeholder="Почему это произошло? Что общего между этими событиями?"></textarea>
+          <textarea class="focus-textarea" id="focusNote" placeholder="${placeholder}"></textarea>
         </div>
         <div class="focus-field">
           <label class="focus-label">Гипотеза / действие</label>
@@ -283,10 +292,13 @@ function renderAnalysisHome(){
   const eventsHtml = active.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">✨</span>Нет активных событий</div>`
     : active.map(e => {
-        const src = e.source === 'habit' ? '🎯 ЗОЖ'
-                  : e.source === 'kanban' ? '📋 Канбан'
-                  : e.source === 'merged' ? '🔗 Объединено'
-                  : '💭 Своё';
+        let src;
+        if(e.source === 'habit') src = '🎯 ЗОЖ';
+        else if(e.source === 'kanban') src = '📋 Канбан';
+        else if(e.source === 'merged') src = '🔗 Объединено';
+        else if(e.source === 'manual' && e.manualType === 'result') src = '🎯 Результат';
+        else src = '💭 Своё';
+
         const label = e.status === 'in_progress' ? 'Продолжить' : 'Принять меры';
         const click = e.status === 'in_progress'
           ? `resumeAnalysisFromEvent('${e.id}')`
@@ -303,7 +315,7 @@ function renderAnalysisHome(){
           : escapeHtml(e.detail);
 
         return `
-          <div class="home-event${e.status === 'in_progress' ? ' in-progress' : ''}" data-event-id="${e.id}">
+          <div class="home-event${e.status === 'in_progress' ? ' in-progress' : ''}${e.source === 'manual' && e.manualType === 'result' ? ' is-result' : ''}" data-event-id="${e.id}">
             <div class="home-event-row">
               ${canSelect ? `<div class="merge-checkbox ${checked}" onclick="toggleMergeSelect('${e.id}', !this.classList.contains('checked')); this.classList.toggle('checked');"></div>` : ''}
               <span class="home-event-date">${fmtEventDate(e.date)}</span>
@@ -441,7 +453,11 @@ function deleteManualAnalysis(){
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
 
-  const canDelete = e.source === 'manual' || (e.source === 'merged' && isAllManualMerge(e));
+  // Удалять можно ТОЛЬКО manual-want или merged, где все дети want.
+  const canDelete =
+    (e.source === 'manual' && e.manualType === 'want') ||
+    (e.source === 'merged' && isAllManualDeletableMerge(e));
+
   if(!canDelete) return;
   if(!confirm('Удалить событие без решения?')) return;
 
