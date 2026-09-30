@@ -101,6 +101,7 @@ let rules   = store.get('rules', []);
 let goals   = store.get('goals', []);
 let checklistEvents = store.get('checklistEvents', []);
 let systemBlock = store.get('systemBlock', { active:false, reason:null, blockedAt:null, events:[], resolution:null });
+let manualExpanded = store.get('manualExpanded', { want: true, result: true });
 
 /* ============ МИГРАЦИЯ ============ */
 habits.forEach(h => {
@@ -129,6 +130,8 @@ checklistEvents.forEach(e => {
   if(e.resolvedAt === undefined) e.resolvedAt = null;
   if(e.childrenIds === undefined) e.childrenIds = null;
   if(e.mergedIntoId === undefined) e.mergedIntoId = null;
+  // старым manual-событиям без manualType -> 'want'
+  if(e.source === 'manual' && !e.manualType) e.manualType = 'want';
 });
 
 /* ============ ХЕЛПЕРЫ MERGED ============ */
@@ -139,13 +142,14 @@ function getMergedChildren(e){
     .filter(Boolean);
 }
 
-function isAllManualMerge(e){
+/* Merged можно удалить без решения, только если ВСЕ дети — manual type 'want'.
+   manual 'result' и автоматические события — обязательны к анализу. */
+function isAllManualDeletableMerge(e){
   const kids = getMergedChildren(e);
   if(kids.length === 0) return false;
-  return kids.every(k => k.source === 'manual');
+  return kids.every(k => k.source === 'manual' && k.manualType === 'want');
 }
 
-/* Резолвит событие. Если merged — закрывает всех детей. */
 function resolveEvent(eventId, solution){
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e) return;
@@ -168,7 +172,6 @@ function resolveEvent(eventId, solution){
   store.set('checklistEvents', checklistEvents);
 }
 
-/* Полностью удаляет merged и возвращает детей обратно в 'new'. */
 function unmergeEvent(mergedId){
   const e = checklistEvents.find(x => x.id === mergedId);
   if(!e || e.source !== 'merged') return;
