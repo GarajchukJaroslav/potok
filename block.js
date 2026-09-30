@@ -130,14 +130,17 @@ function confirmBlockResolution(){
     solutions.push({ eventId: inp.dataset.solutionFor, text: v });
   }
 
-  // Применяем: каждое событие -> resolved + solution
   const now = Date.now();
   solutions.forEach(s => {
-    const e = checklistEvents.find(x => x.id === s.eventId);
-    if(e){
-      e.status = 'resolved';
-      e.resolvedAt = now;
-      e.solution = s.text;
+    if(typeof resolveEvent === 'function'){
+      resolveEvent(s.eventId, s.text);
+    } else {
+      const e = checklistEvents.find(x => x.id === s.eventId);
+      if(e){
+        e.status = 'resolved';
+        e.resolvedAt = now;
+        e.solution = s.text;
+      }
     }
   });
   store.set('checklistEvents', checklistEvents);
@@ -155,12 +158,10 @@ function confirmBlockResolution(){
   };
   store.set('systemBlock', systemBlock);
 
-  // Закрываем overlay
   const overlay = document.getElementById('blockOverlay');
   if(overlay) overlay.classList.remove('open');
   document.body.style.overflow = '';
 
-  // Перерисовываем всё что зависит
   if(typeof renderChecklist === 'function') renderChecklist();
   if(typeof renderAnalysis === 'function') renderAnalysis();
   if(typeof renderKanban === 'function') renderKanban();
