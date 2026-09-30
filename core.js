@@ -10,7 +10,6 @@ const store = {
   set(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
 };
 
-/* Дата старта системы: события раньше не генерируются */
 const SYSTEM_START_DATE = '2026-09-30';
 
 function dayStr(d){
@@ -90,7 +89,6 @@ function stepEffectiveStatus(step){
   return 'todo';
 }
 
-/* Форматирование даты для заголовка события */
 function fmtEventDate(dateStr){
   const d = new Date(dateStr + 'T12:00:00');
   return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
@@ -129,7 +127,64 @@ checklistEvents.forEach(e => {
   if(e.analysisStartedAt === undefined) e.analysisStartedAt = null;
   if(e.analysisDeadline === undefined) e.analysisDeadline = null;
   if(e.resolvedAt === undefined) e.resolvedAt = null;
+  if(e.childrenIds === undefined) e.childrenIds = null;
+  if(e.mergedIntoId === undefined) e.mergedIntoId = null;
 });
+
+/* ============ ХЕЛПЕРЫ MERGED ============ */
+function getMergedChildren(e){
+  if(!e || e.source !== 'merged' || !Array.isArray(e.childrenIds)) return [];
+  return e.childrenIds
+    .map(id => checklistEvents.find(x => x.id === id))
+    .filter(Boolean);
+}
+
+function isAllManualMerge(e){
+  const kids = getMergedChildren(e);
+  if(kids.length === 0) return false;
+  return kids.every(k => k.source === 'manual');
+}
+
+/* Резолвит событие. Если merged — закрывает всех детей. */
+function resolveEvent(eventId, solution){
+  const e = checklistEvents.find(x => x.id === eventId);
+  if(!e) return;
+  const now = Date.now();
+  e.status = 'resolved';
+  e.resolvedAt = now;
+  e.solution = solution;
+
+  if(e.source === 'merged' && Array.isArray(e.childrenIds)){
+    e.childrenIds.forEach(cid => {
+      const c = checklistEvents.find(x => x.id === cid);
+      if(c){
+        c.status = 'resolved';
+        c.resolvedAt = now;
+        c.solution = solution;
+        c.mergedIntoId = e.id;
+      }
+    });
+  }
+  store.set('checklistEvents', checklistEvents);
+}
+
+/* Полностью удаляет merged и возвращает детей обратно в 'new'. */
+function unmergeEvent(mergedId){
+  const e = checklistEvents.find(x => x.id === mergedId);
+  if(!e || e.source !== 'merged') return;
+
+  if(Array.isArray(e.childrenIds)){
+    e.childrenIds.forEach(cid => {
+      const c = checklistEvents.find(x => x.id === cid);
+      if(c && c.status === 'merged'){
+        c.status = 'new';
+        c.mergedIntoId = null;
+      }
+    });
+  }
+  checklistEvents = checklistEvents.filter(x => x.id !== mergedId);
+  store.set('checklistEvents', checklistEvents);
+}
 
 /* ============ НУМЕРАЦИЯ ============ */
 let thoughtNums = {};
@@ -162,5 +217,5 @@ function refreshNumbers(){
 }
 
 /* ============ ТАЙМЕРЫ ============ */
-const EVENT_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 часа
-const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;    // 15 минут
+const EVENT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+const ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;
