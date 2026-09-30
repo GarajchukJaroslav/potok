@@ -174,19 +174,21 @@ function openManualPicker(){
         }
       });
     });
-  } else {
-    // result — только leaf-шаги (без подшагов), все: выполненные доступны, невыполненные disabled
+    } else {
+    // result — показываем ВСЕ шаги (и контейнеры, и leaf).
+    // "Выполнен" = stepEffectiveStatus(step) === 'done'.
+    // Подшаги НЕ показываем — только шаги.
     goals.forEach(g => {
       (g.steps || []).forEach(step => {
-        const subs = step.substeps || [];
-        if(subs.length > 0) return;
+        const effStatus = stepEffectiveStatus(step);
+        const done = effStatus === 'done';
+        const hasSubs = (step.substeps || []).length > 0;
 
-        const done = step.status === 'done';
         tasks.push({
           value: 'kanban:' + g.id + ':' + step.id,
           group: g.text,
           title: step.text,
-          crumb: null,
+          crumb: hasSubs ? 'шаг с подшагами' : null,
           refType: 'kanban',
           refId: step.id,
           goalId: g.id,
