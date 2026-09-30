@@ -81,12 +81,32 @@
           <div class="checklist-section-title">События системы</div>
           <div class="list" id="checklistList"></div>
         </div>
-        <div class="checklist-side">
-          <div class="checklist-side-head">
-            <div class="checklist-section-title" style="margin:0;">Не хочу делать</div>
-            <button class="manual-add-btn" onclick="openManualPicker()" title="Добавить">+</button>
+                <div class="checklist-side">
+          <div class="manual-section" data-type="want">
+            <div class="manual-section-head" onclick="toggleManualSection('want')">
+              <div class="checklist-section-title" style="margin:0;">
+                <span class="ms-chevron" id="chevWant">▼</span>
+                Не хочу делать
+              </div>
+              <button class="manual-add-btn" onclick="event.stopPropagation(); openManualPicker('want')" title="Добавить">+</button>
+            </div>
+            <div class="manual-section-body" id="manualBodyWant">
+              <div class="list" id="checklistManualListWant"></div>
+            </div>
           </div>
-          <div class="list" id="checklistManualList"></div>
+
+          <div class="manual-section" data-type="result">
+            <div class="manual-section-head" onclick="toggleManualSection('result')">
+              <div class="checklist-section-title" style="margin:0;">
+                <span class="ms-chevron" id="chevResult">▼</span>
+                Результат не соответствует
+              </div>
+              <button class="manual-add-btn result" onclick="event.stopPropagation(); openManualPicker('result')" title="Добавить">+</button>
+            </div>
+            <div class="manual-section-body" id="manualBodyResult">
+              <div class="list" id="checklistManualListResult"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -143,11 +163,11 @@
 <div class="manual-overlay" id="manualOverlay" onclick="if(event.target===this) closeManualPicker()">
   <div class="manual-modal">
     <div class="manual-modal-head">
-      <div class="manual-modal-title">Не хочу делать</div>
+      <div class="manual-modal-title" id="manualModalTitle">Не хочу делать</div>
       <button class="modal-close" onclick="closeManualPicker()">✕</button>
     </div>
     <div class="manual-field">
-      <label class="manual-label">Что не хочется делать</label>
+      <label class="manual-label" id="manualTaskLabel">Что не хочется делать</label>
       <select class="manual-select" id="manualTaskSelect"></select>
     </div>
     <div class="manual-field">
