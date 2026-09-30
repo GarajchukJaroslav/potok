@@ -1,11 +1,11 @@
 /* ==================================================================
    ЭКРАН «АНАЛИЗ → ДЕЙСТВИЯ»
-   Мысли создаются только из событий Чеклиста, с таймером 15 мин.
-   Для manual-событий есть опция «удалить без решения».
+   Событие-фокус, таймер 15 мин, объединение нескольких событий.
 ================================================================== */
 
 let activeAnalysisEventId = null;
 let analysisTicker = null;
+let selectedForMerge = new Set();
 
 /* ---------- СТАРТ / ПРОДОЛЖЕНИЕ ---------- */
 function startAnalysisFromEvent(eventId){
@@ -20,6 +20,7 @@ function startAnalysisFromEvent(eventId){
   store.set('checklistEvents', checklistEvents);
 
   activeAnalysisEventId = eventId;
+  selectedForMerge.clear();
   if(typeof goTo === 'function') goTo(3);
   renderAnalysis();
   startAnalysisTicker();
@@ -29,6 +30,7 @@ function resumeAnalysisFromEvent(eventId){
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e || e.status !== 'in_progress') return;
   activeAnalysisEventId = eventId;
+  selectedForMerge.clear();
   if(typeof goTo === 'function') goTo(3);
   renderAnalysis();
   startAnalysisTicker();
@@ -65,7 +67,103 @@ function updateTimerDisplay(el){
   else if(left < 5*60000) el.classList.add('warning');
 }
 
-/* ---------- РЕНДЕР ---------- */
+/* ---------- MERGE UI ---------- */
+function toggleMergeSelect(eventId, checked){
+  if(checked) selectedForMerge.add(eventId);
+  else selectedForMerge.delete(eventId);
+  renderMergePanel();
+  // перерисовать home — чтобы чекбокс отражал состояние
+  updateHomeCheckboxes();
+}
+
+function updateHomeCheckboxes(){
+  document.querySelectorAll('.home-event[data-event-id]').forEach(el => {
+    const id = el.dataset.eventId;
+    const cb = el.querySelector('.merge-checkbox');
+    if(cb) cb.classList.toggle('checked', selectedForMerge.has(id));
+  });
+}
+
+function renderMergePanel(){
+  const host = document.getElementById('mergePanelHost');
+  if(!host) return;
+
+  if(selectedForMerge.size < 2){
+    host.innerHTML = '';
+    return;
+  }
+
+  host.innerHTML = `
+    <div class="merge-panel">
+      <div class="merge-count">
+        Выбрано: <b>${selectedForMerge.size}</b>
+      </div>
+      <button class="merge-btn-cancel" onclick="clearMergeSelection()">Отмена</button>
+      <button class="merge-btn-go" onclick="createMergedEvent()">Объединить и анализировать</button>
+    </div>
+  `;
+}
+
+function clearMergeSelection(){
+  selectedForMerge.clear();
+  renderMergePanel();
+  updateHomeCheckboxes();
+}
+
+function createMergedEvent(){
+  const ids = [...selectedForMerge];
+  if(ids.length < 2) return;
+
+  const children = ids
+    .map(id => checklistEvents.find(x => x.id === id))
+    .filter(Boolean)
+    .filter(e => e.status === 'new'); // только new
+
+  if(children.length < 2){
+    alert('Можно объединять только новые события');
+    clearMergeSelection();
+    return;
+  }
+
+  const minCreatedAt = Math.min(...children.map(c => c.createdAt || Date.now()));
+  const minDate = children.map(c => c.date).sort()[0];
+
+  const merged = {
+    id: uid(),
+    date: minDate,
+    source: 'merged',
+    refId: null,
+    title: null,
+    detail: null,
+    crumb: null,
+    createdAt: minCreatedAt,
+    status: 'in_progress',
+    analysisStartedAt: Date.now(),
+    analysisDeadline: Date.now() + ANALYSIS_TIMEOUT_MS,
+    resolvedAt: null,
+    solution: null,
+    childrenIds: children.map(c => c.id),
+    mergedIntoId: null
+  };
+
+  // дети -> status: 'merged'
+  children.forEach(c => {
+    c.status = 'merged';
+    c.mergedIntoId = merged.id;
+  });
+
+  checklistEvents.push(merged);
+  store.set('checklistEvents', checklistEvents);
+
+  selectedForMerge.clear();
+  activeAnalysisEventId = merged.id;
+
+  renderAnalysis();
+  startAnalysisTicker();
+  if(typeof renderChecklist === 'function') renderChecklist();
+}
+
+/* ---------- РЕНДЕР ЭКРАНА ---------- */
 function renderAnalysis(){
   const isFocused = !!activeAnalysisEventId;
   const focusEl = document.getElementById('analysisFocus');
@@ -84,37 +182,60 @@ function renderAnalysis(){
     homeEl.style.display = 'none';
     renderAnalysisFocus(e);
     startAnalysisTicker();
+    renderMergePanel();
   } else {
     focusEl.style.display = 'none';
     homeEl.style.display = 'flex';
     stopAnalysisTicker();
     renderAnalysisHome();
+    renderMergePanel();
   }
 }
 
 function renderAnalysisFocus(e){
   const focusEl = document.getElementById('analysisFocus');
+  const isMerged = e.source === 'merged';
   const isManual = e.source === 'manual';
-  const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё событие');
-  const sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
-  const crumb = e.crumb ? `<div class="focus-event-crumb">${escapeHtml(e.crumb)}</div>` : '';
 
-  const cancelBtn = isManual
-    ? `<button class="btn-cancel-focus danger" onclick="deleteManualAnalysis()">Удалить без решения</button>`
-    : `<button class="btn-cancel-focus" onclick="cancelAnalysis()">Свернуть</button>`;
+  let headerHtml = '';
+
+  if(isMerged){
+    const kids = getMergedChildren(e);
+    const kidsHtml = kids.map(k => {
+      const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : '💭');
+      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'kanban' ? 'Канбан' : 'Своё');
+      const crumb = k.crumb ? ` <span class="focus-kid-crumb">· ${escapeHtml(k.crumb)}</span>` : '';
+      return `<div class="focus-kid"><span class="focus-kid-icon">${icon}</span><span class="focus-kid-label">${label}</span><span class="focus-kid-title">${escapeHtml(k.title)}</span>${crumb}</div>`;
+    }).join('');
+
+    headerHtml = `
+      <div class="focus-event-meta">
+        <span class="event-source merged">🔗 Объединённый анализ</span>
+      </div>
+      <div class="focus-event-title">${kids.length} ${plural(kids.length,'событие','события','событий')}</div>
+      <div class="focus-kids">${kidsHtml}</div>
+    `;
+  } else {
+    const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё');
+    const sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
+    const crumb = e.crumb ? `<div class="focus-event-crumb">${escapeHtml(e.crumb)}</div>` : '';
+    headerHtml = `
+      <div class="focus-event-meta">
+        <span class="event-date">${fmtEventDate(e.date)}</span>
+        <span class="event-source ${e.source}">${sourceIcon} ${sourceLabel}</span>
+      </div>
+      <div class="focus-event-title">${escapeHtml(e.title)}</div>
+      ${crumb}
+      <div class="focus-event-detail">${escapeHtml(e.detail)}</div>
+    `;
+  }
+
+  const canDelete = (isManual || (isMerged && isAllManualMerge(e)));
 
   focusEl.innerHTML = `
     <div class="focus-panel">
       <div class="focus-head">
-        <div class="focus-event-info">
-          <div class="focus-event-meta">
-            <span class="event-date">${fmtEventDate(e.date)}</span>
-            <span class="event-source ${e.source}">${sourceIcon} ${sourceLabel}</span>
-          </div>
-          <div class="focus-event-title">${escapeHtml(e.title)}</div>
-          ${crumb}
-          <div class="focus-event-detail">${escapeHtml(e.detail)}</div>
-        </div>
+        <div class="focus-event-info">${headerHtml}</div>
         <div class="focus-timer-wrap">
           <div class="focus-timer-label">Осталось</div>
           <div class="focus-timer" id="focusTimer">15:00</div>
@@ -125,7 +246,7 @@ function renderAnalysisFocus(e){
         <div class="focus-field">
           <label class="focus-label">Анализ проблемы</label>
           <textarea class="focus-textarea" id="focusNote"
-            placeholder="Почему это произошло? Что помешало? Что смущает?"></textarea>
+            placeholder="Почему это произошло? Что общего между этими событиями?"></textarea>
         </div>
         <div class="focus-field">
           <label class="focus-label">Гипотеза / действие</label>
@@ -136,7 +257,7 @@ function renderAnalysisFocus(e){
 
       <div class="focus-actions">
         <button class="btn-cancel-focus" onclick="minimizeAnalysis()">Свернуть</button>
-        ${isManual ? `<button class="btn-cancel-focus danger" onclick="deleteManualAnalysis()">Удалить без решения</button>` : ''}
+        ${canDelete ? `<button class="btn-cancel-focus danger" onclick="deleteManualAnalysis()">Удалить без решения</button>` : ''}
         <button class="btn-save-focus" onclick="saveAnalysis()">Сохранить и закрыть</button>
       </div>
     </div>
@@ -155,28 +276,41 @@ function renderAnalysisFocus(e){
 
 function renderAnalysisHome(){
   const homeEl = document.getElementById('analysisHome');
-  const newEvents = checklistEvents
-    .filter(e => e.status !== 'resolved')
+  const active = checklistEvents
+    .filter(e => e.status === 'new' || e.status === 'in_progress')
     .sort((a,b) => b.date.localeCompare(a.date));
 
-  const eventsHtml = newEvents.length === 0
+  const eventsHtml = active.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">✨</span>Нет активных событий</div>`
-    : newEvents.map(e => {
+    : active.map(e => {
         const src = e.source === 'habit' ? '🎯 ЗОЖ'
                   : e.source === 'kanban' ? '📋 Канбан'
+                  : e.source === 'merged' ? '🔗 Объединено'
                   : '💭 Своё';
         const label = e.status === 'in_progress' ? 'Продолжить' : 'Принять меры';
         const click = e.status === 'in_progress'
           ? `resumeAnalysisFromEvent('${e.id}')`
           : `startAnalysisFromEvent('${e.id}')`;
+        const checked = selectedForMerge.has(e.id) ? 'checked' : '';
+        const canSelect = e.status === 'new';
+
+        const title = e.source === 'merged'
+          ? `${getMergedChildren(e).length} ${plural(getMergedChildren(e).length,'событие','события','событий')}`
+          : escapeHtml(e.title);
+
+        const detail = e.source === 'merged'
+          ? getMergedChildren(e).map(k => escapeHtml(k.title)).join(' · ')
+          : escapeHtml(e.detail);
+
         return `
-          <div class="home-event${e.status === 'in_progress' ? ' in-progress' : ''}">
+          <div class="home-event${e.status === 'in_progress' ? ' in-progress' : ''}" data-event-id="${e.id}">
             <div class="home-event-row">
+              ${canSelect ? `<div class="merge-checkbox ${checked}" onclick="toggleMergeSelect('${e.id}', !this.classList.contains('checked')); this.classList.toggle('checked');"></div>` : ''}
               <span class="home-event-date">${fmtEventDate(e.date)}</span>
               <span class="home-event-source">${src}</span>
             </div>
-            <div class="home-event-title">${escapeHtml(e.title)}</div>
-            <div class="home-event-detail">${escapeHtml(e.detail)}</div>
+            <div class="home-event-title">${title}</div>
+            <div class="home-event-detail">${detail}</div>
             <button class="btn-take-action small" onclick="${click}">${label}</button>
           </div>`;
       }).join('');
@@ -244,7 +378,7 @@ function renderAnalysisHome(){
   `;
 }
 
-/* ---------- ДЕЙСТВИЯ ---------- */
+/* ---------- СОХРАНЕНИЕ ---------- */
 function saveAnalysis(){
   const noteEl = document.getElementById('focusNote');
   const actEl = document.getElementById('focusAction');
@@ -282,14 +416,13 @@ function saveAnalysis(){
   rules.unshift(rule);
   thought.rules.push(rule.id);
 
-  e.status = 'resolved';
-  e.resolvedAt = Date.now();
   e.analysisId = thought.id;
-  e.solution = action;
 
   store.set('thoughts', thoughts);
   store.set('rules', rules);
   store.set('checklistEvents', checklistEvents);
+
+  resolveEvent(e.id, action);
 
   activeAnalysisEventId = null;
   stopAnalysisTicker();
@@ -299,21 +432,25 @@ function saveAnalysis(){
   if(typeof renderKanban === 'function') renderKanban();
 }
 
-/* Свернуть фокус — таймер продолжает идти */
 function minimizeAnalysis(){
   activeAnalysisEventId = null;
   renderAnalysis();
 }
 
-/* Удалить manual-событие без решения */
 function deleteManualAnalysis(){
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
-  if(e.source !== 'manual') return;
+
+  const canDelete = e.source === 'manual' || (e.source === 'merged' && isAllManualMerge(e));
+  if(!canDelete) return;
   if(!confirm('Удалить событие без решения?')) return;
 
-  checklistEvents = checklistEvents.filter(x => x.id !== e.id);
-  store.set('checklistEvents', checklistEvents);
+  if(e.source === 'merged'){
+    unmergeEvent(e.id);
+  } else {
+    checklistEvents = checklistEvents.filter(x => x.id !== e.id);
+    store.set('checklistEvents', checklistEvents);
+  }
 
   activeAnalysisEventId = null;
   stopAnalysisTicker();
