@@ -68,11 +68,11 @@ function updateTimerDisplay(el){
 }
 
 /* ---------- MERGE UI ---------- */
-function toggleMergeSelect(eventId, checked){
-  if(checked) selectedForMerge.add(eventId);
-  else selectedForMerge.delete(eventId);
-  renderMergePanel();
+function toggleMergeSelect(eventId){
+  if(selectedForMerge.has(eventId)) selectedForMerge.delete(eventId);
+  else selectedForMerge.add(eventId);
   updateHomeCheckboxes();
+  renderMergePanel();
 }
 
 function updateHomeCheckboxes(){
@@ -317,7 +317,7 @@ function renderAnalysisHome(){
         return `
           <div class="home-event${e.status === 'in_progress' ? ' in-progress' : ''}${e.source === 'manual' && e.manualType === 'result' ? ' is-result' : ''}" data-event-id="${e.id}">
             <div class="home-event-row">
-              ${canSelect ? `<div class="merge-checkbox ${checked}" onclick="toggleMergeSelect('${e.id}', !this.classList.contains('checked')); this.classList.toggle('checked');"></div>` : ''}
+              ${canSelect ? `<div class="merge-checkbox ${checked}" onclick="toggleMergeSelect('${e.id}')"></div>` : ''}
               <span class="home-event-date">${fmtEventDate(e.date)}</span>
               <span class="home-event-source">${src}</span>
             </div>
