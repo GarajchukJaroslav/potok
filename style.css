@@ -1827,3 +1827,80 @@ body::after{
   background:linear-gradient(135deg, rgba(0,217,255,0.06), rgba(124,92,255,0.03));
   border-color:rgba(0,217,255,0.25);
 }
+
+/* ============ ПРАВАЯ КОЛОНКА: ДРОПДАУН ============ */
+.checklist-side{
+  display:flex; flex-direction:column;
+}
+
+.side-head{
+  display:flex; align-items:center; gap:8px;
+  margin-bottom:14px; flex-shrink:0;
+}
+
+.side-select{
+  flex:1; min-width:0;
+  background:rgba(0,0,0,0.35);
+  border:1px solid var(--border);
+  border-radius:11px;
+  padding:10px 34px 10px 14px;
+  color:var(--text);
+  font-size:13px; font-family:inherit; font-weight:600;
+  outline:none;
+  transition:all 0.2s;
+  color-scheme: dark;
+  cursor:pointer;
+  appearance:none; -webkit-appearance:none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) center,
+    calc(100% - 11px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.side-select:hover{
+  border-color:rgba(255,255,255,0.18);
+  background-color: rgba(0,0,0,0.45);
+}
+.side-select:focus{
+  border-color:rgba(255,159,77,0.5);
+  box-shadow:0 0 0 3px rgba(255,159,77,0.1);
+}
+.side-select option{
+  background:#1a0b2e;
+  color:var(--text);
+  padding:8px;
+}
+
+/* Кнопка + в правой колонке */
+.checklist-side .manual-add-btn{
+  width:40px; height:40px;
+  flex-shrink:0;
+}
+.checklist-side .manual-add-btn.result{
+  background:linear-gradient(135deg, rgba(0,217,255,0.25), rgba(0,217,255,0.1));
+  border-color:rgba(0,217,255,0.4);
+  color:#8ad4ff;
+}
+.checklist-side .manual-add-btn.result:hover{
+  background:linear-gradient(135deg, rgba(0,217,255,0.4), rgba(0,217,255,0.2));
+  color:#fff;
+}
+
+/* Список в правой колонке растягивается */
+.checklist-side .list{
+  flex:1; min-height:0;
+  overflow-y:auto;
+  display:flex; flex-direction:column; gap:10px;
+  padding-right:4px;
+}
+.checklist-side .list::-webkit-scrollbar{ width:5px; }
+.checklist-side .list::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.1); border-radius:3px; }
+
+/* Result-событие — голубой акцент */
+.checklist-event.manual-result{
+  background:linear-gradient(135deg, rgba(0,217,255,0.07), rgba(124,92,255,0.03));
+  border-color:rgba(0,217,255,0.3);
+}
