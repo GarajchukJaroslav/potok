@@ -1,5 +1,5 @@
 /* ==================================================================
-   ЧЕКЛИСТ — автоматические события + свои «не хочу делать»
+   ЧЕКЛИСТ — авто-события + свои «не хочу делать» + merged
 ================================================================== */
 
 /* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ ---------- */
@@ -101,17 +101,16 @@ function addEventIfMissing(source, refId, date, info){
     analysisStartedAt: null,
     analysisDeadline: null,
     resolvedAt: null,
-    solution: null
+    solution: null,
+    childrenIds: null,
+    mergedIntoId: null
   });
 }
 
-/* ---------- РУЧНЫЕ СОБЫТИЯ: «НЕ ХОЧУ ДЕЛАТЬ» ---------- */
-
+/* ---------- РУЧНЫЕ СОБЫТИЯ ---------- */
 function openManualPicker(){
-  // Собираем список задач
   const tasks = [];
 
-  // Привычки
   habits.forEach(h => {
     tasks.push({
       value: 'habit:' + h.id,
@@ -123,7 +122,6 @@ function openManualPicker(){
     });
   });
 
-  // Leaf-задачи из канбана
   goals.forEach(g => {
     if(g.done) return;
     (g.steps || []).forEach(step => {
@@ -179,7 +177,6 @@ function openManualPicker(){
     sel.innerHTML = html;
   }
 
-  // Дата по умолчанию — сегодня
   const dateInp = document.getElementById('manualDate');
   if(dateInp){
     dateInp.value = todayStr();
@@ -203,10 +200,7 @@ function createManualEvent(){
 
   if(!value){ alert('Выбери задачу'); sel.focus(); return; }
   if(!date){ alert('Укажи дату'); dateInp.focus(); return; }
-  if(date < SYSTEM_START_DATE){
-    alert('Дата раньше старта системы');
-    return;
-  }
+  if(date < SYSTEM_START_DATE){ alert('Дата раньше старта системы'); return; }
 
   const opt = sel.options[sel.selectedIndex];
   const refType = opt.dataset.refType;
@@ -214,7 +208,6 @@ function createManualEvent(){
   const title = opt.dataset.title;
   const crumb = opt.dataset.crumb || null;
 
-  // Проверка на дубликат (та же задача + та же дата)
   const dup = checklistEvents.find(e =>
     e.source === 'manual' &&
     e.refType === refType &&
@@ -222,10 +215,7 @@ function createManualEvent(){
     e.date === date &&
     e.status !== 'resolved'
   );
-  if(dup){
-    alert('Такое событие уже есть');
-    return;
-  }
+  if(dup){ alert('Такое событие уже есть'); return; }
 
   checklistEvents.push({
     id: uid(),
@@ -242,10 +232,11 @@ function createManualEvent(){
     analysisStartedAt: null,
     analysisDeadline: null,
     resolvedAt: null,
-    solution: null
+    solution: null,
+    childrenIds: null,
+    mergedIntoId: null
   });
   store.set('checklistEvents', checklistEvents);
-
   closeManualPicker();
   renderChecklist();
 }
@@ -261,10 +252,12 @@ function renderChecklist(){
   autoList.innerHTML = '';
   manualList.innerHTML = '';
 
-  const auto = checklistEvents.filter(e => e.source !== 'manual');
-  const manual = checklistEvents.filter(e => e.source === 'manual');
+  // дети merged не показываются отдельно
+  const visible = checklistEvents.filter(e => e.status !== 'merged');
 
-  // Сортировка: активные наверх
+  const auto = visible.filter(e => e.source !== 'manual');
+  const manual = visible.filter(e => e.source === 'manual');
+
   const sortFn = (a,b) => {
     const aDone = a.status === 'resolved' ? 1 : 0;
     const bDone = b.status === 'resolved' ? 1 : 0;
@@ -274,7 +267,6 @@ function renderChecklist(){
   auto.sort(sortFn);
   manual.sort(sortFn);
 
-  // AUTO
   if(auto.length === 0){
     autoList.innerHTML = `
       <div class="empty">
@@ -285,7 +277,6 @@ function renderChecklist(){
     auto.forEach(e => autoList.appendChild(buildEventCard(e)));
   }
 
-  // MANUAL
   if(manual.length === 0){
     manualList.innerHTML = `
       <div class="empty" style="padding:30px 20px;">
@@ -302,11 +293,22 @@ function buildEventCard(e, isManual){
   const el = document.createElement('div');
   el.className = 'checklist-event';
   if(isManual) el.classList.add('manual');
+  if(e.source === 'merged') el.classList.add('merged');
   if(e.status === 'resolved') el.classList.add('resolved');
   if(e.status === 'in_progress') el.classList.add('in-progress');
 
-  const sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё');
-  const sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
+  let sourceLabel, sourceIcon, titleHtml;
+
+  if(e.source === 'merged'){
+    sourceLabel = 'Объединено';
+    sourceIcon = '🔗';
+    const kids = getMergedChildren(e);
+    titleHtml = `${kids.length} ${plural(kids.length,'событие','события','событий')}`;
+  } else {
+    sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё');
+    sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
+    titleHtml = escapeHtml(e.title);
+  }
 
   let actionHtml = '';
   if(e.status === 'new'){
@@ -317,17 +319,30 @@ function buildEventCard(e, isManual){
     actionHtml = `<div class="event-resolved-badge">✓ Решено</div>`;
   }
 
-  const crumbHtml = e.crumb ? `<div class="event-crumb">${escapeHtml(e.crumb)}</div>` : '';
-  const solutionHtml = e.solution ? `<div class="event-solution">Решение: ${escapeHtml(e.solution)}</div>` : '';
+  const crumbHtml = e.crumb && e.source !== 'merged'
+    ? `<div class="event-crumb">${escapeHtml(e.crumb)}</div>` : '';
+  const solutionHtml = e.solution
+    ? `<div class="event-solution">Решение: ${escapeHtml(e.solution)}</div>` : '';
+
+  let childrenHtml = '';
+  if(e.source === 'merged'){
+    const kids = getMergedChildren(e);
+    childrenHtml = `<div class="event-children">${kids.map(k => {
+      const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : '💭');
+      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'kanban' ? 'Канбан' : 'Своё');
+      return `<div class="event-child"><span class="event-child-icon">${icon}</span><span class="event-child-label">${label}</span><span class="event-child-title">${escapeHtml(k.title)}</span></div>`;
+    }).join('')}</div>`;
+  }
 
   el.innerHTML = `
     <div class="event-head">
       <div class="event-date">${fmtEventDate(e.date)}</div>
       <div class="event-source ${e.source}">${sourceIcon} ${sourceLabel}</div>
     </div>
-    <div class="event-title">${escapeHtml(e.title)}</div>
+    <div class="event-title">${titleHtml}</div>
     ${crumbHtml}
-    <div class="event-detail">${escapeHtml(e.detail)}</div>
+    ${childrenHtml}
+    ${e.source !== 'merged' ? `<div class="event-detail">${escapeHtml(e.detail)}</div>` : ''}
     ${solutionHtml}
     <div class="event-foot">${actionHtml}</div>
   `;
