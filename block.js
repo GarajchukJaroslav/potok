@@ -62,26 +62,70 @@ function renderSystemBlock(){
     ? '⏱ Анализ просрочен'
     : '⚠ Требуется внешняя помощь';
 
-  const eventsListHtml = blockedEvents.map(e => {
-    const src = e.source === 'habit' ? 'ЗОЖ' : 'Канбан';
+  // Хелпер: как показать одно событие в блоке
+  function eventBlockHtml(e){
+    let src, title, detailHtml, childrenHtml = '';
+
+    if(e.source === 'merged'){
+      src = '🔗 Объединено';
+      const kids = getMergedChildren(e);
+      title = `${kids.length} ${plural(kids.length,'событие','события','событий')}`;
+      detailHtml = '';
+      childrenHtml = `<div class="block-event-children">${kids.map(k => {
+        const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : '💭');
+        const label = k.source === 'habit' ? 'ЗОЖ'
+                    : (k.source === 'kanban' ? 'Канбан'
+                    : (k.manualType === 'result' ? 'Результат' : 'Своё'));
+        return `<div class="block-event-child"><span>${icon}</span><span class="block-event-child-label">${label}</span><span class="block-event-child-title">${escapeHtml(k.title)}</span></div>`;
+      }).join('')}</div>`;
+    } else if(e.source === 'habit'){
+      src = '🎯 ЗОЖ';
+      title = e.title;
+      detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
+    } else if(e.source === 'kanban'){
+      src = '📋 Канбан';
+      title = e.title;
+      detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
+    } else if(e.source === 'manual'){
+      src = e.manualType === 'result' ? '🎯 Результат' : '💭 Своё';
+      title = e.title;
+      detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
+    } else {
+      src = 'Событие';
+      title = e.title || '(без названия)';
+      detailHtml = '';
+    }
+
     return `
       <div class="block-event-item">
         <div class="block-event-head">
           <span class="block-event-date">${fmtEventDate(e.date)}</span>
           <span class="block-event-source">${src}</span>
         </div>
-        <div class="block-event-title">${escapeHtml(e.title)}</div>
-        <div class="block-event-detail">${escapeHtml(e.detail)}</div>
+        <div class="block-event-title">${escapeHtml(title)}</div>
+        ${detailHtml}
+        ${childrenHtml}
+      </div>`;
+  }
+
+  const eventsListHtml = blockedEvents.map(eventBlockHtml).join('');
+
+  // Форма решений: для merged — тоже строим label по смыслу
+  const solutionsFormHtml = blockedEvents.map(e => {
+    let label;
+    if(e.source === 'merged'){
+      const kids = getMergedChildren(e);
+      label = `${kids.length} ${plural(kids.length,'событие','события','событий')} (объединённые)`;
+    } else {
+      label = e.title || '(без названия)';
+    }
+    return `
+      <div class="block-solution-row">
+        <div class="block-solution-label">${escapeHtml(label)}</div>
+        <textarea class="block-solution-input" data-solution-for="${e.id}"
+          placeholder="Что решили по этой проблеме?"></textarea>
       </div>`;
   }).join('');
-
-  const solutionsFormHtml = blockedEvents.map(e => `
-    <div class="block-solution-row">
-      <div class="block-solution-label">${escapeHtml(e.title)}</div>
-      <textarea class="block-solution-input" data-solution-for="${e.id}"
-        placeholder="Что решили по этой проблеме?"></textarea>
-    </div>
-  `).join('');
 
   card.innerHTML = `
     <div class="block-title">${reasonTitle}</div>
@@ -95,8 +139,8 @@ function renderSystemBlock(){
 
     <div class="block-form">
       <div class="block-solution-row">
-        <div class="block-solution-label">С кем обсудил</div>
-        <input class="block-solution-input" id="blockDiscussedWith"
+        <label class="block-solution-label" for="blockDiscussedWith">С кем обсудил</label>
+        <input class="block-solution-input" id="blockDiscussedWith" name="blockDiscussedWith"
           type="text" placeholder="Имя / кто это">
       </div>
       <div class="block-events-title" style="margin-top:18px;">Решения:</div>
