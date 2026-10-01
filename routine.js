@@ -15,7 +15,8 @@ function addHabit(){
     target: habitDraft.target,
     period: habitDraft.period,
     createdAt: todayStr(),
-    log: {}
+    log: {},
+    slots: {}
   });
   inp.value = '';
   store.set('habits', habits);
@@ -27,6 +28,22 @@ function clickHabit(id){
   const h = habits.find(x => x.id === id);
   if(!h) return;
   const t = todayStr();
+
+  // привычка "N раз в день" (N>1) — работаем через слоты
+  if(h.period === 'day' && h.target > 1){
+    const slots = ensureSlots(h, t);
+    const firstFalse = slots.indexOf(false);
+    if(firstFalse === -1){
+      slots.fill(false); // всё было закрыто — обнуляем
+    } else {
+      slots[firstFalse] = true;
+    }
+    syncLogFromSlots(h, t);
+    store.set('habits', habits);
+    renderHabits();
+    return;
+  }
+
   const cur = h.log[t] || 0;
   if(h.target === 1 && h.period === 'day'){
     h.log[t] = cur >= 1 ? 0 : 1;
@@ -42,6 +59,22 @@ function decHabit(id){
   const h = habits.find(x => x.id === id);
   if(!h) return;
   const t = todayStr();
+
+  // привычка "N раз в день" (N>1) — снимаем последний закрытый слот
+  if(h.period === 'day' && h.target > 1){
+    const slots = ensureSlots(h, t);
+    let lastTrue = -1;
+    for(let i = slots.length - 1; i >= 0; i--){
+      if(slots[i]){ lastTrue = i; break; }
+    }
+    if(lastTrue === -1) return;
+    slots[lastTrue] = false;
+    syncLogFromSlots(h, t);
+    store.set('habits', habits);
+    renderHabits();
+    return;
+  }
+
   const cur = h.log[t] || 0;
   if(cur <= 0) return;
   h.log[t] = cur - 1;
@@ -189,6 +222,36 @@ function renderHabits(){
   if(sub) sub.textContent = total === 0 ? '' : `выполнено ${doneCount} из ${total}`;
 }
 
+/* ---------- СЛОТЫ (для привычек N раз в день) ---------- */
+function ensureSlots(h, date){
+  if(!h.slots) h.slots = {};
+  if(!h.slots[date]){
+    h.slots[date] = new Array(h.target).fill(false);
+  }
+  while(h.slots[date].length < h.target) h.slots[date].push(false);
+  if(h.slots[date].length > h.target) h.slots[date].length = h.target;
+  return h.slots[date];
+}
+
+function syncLogFromSlots(h, date){
+  const slots = h.slots[date] || [];
+  const n = slots.filter(Boolean).length;
+  if(n === 0) delete h.log[date];
+  else h.log[date] = n;
+}
+
+function toggleSlot(habitId, date, slotIndex){
+  const h = habits.find(x => x.id === habitId);
+  if(!h) return;
+  if(date > todayStr()) return;
+  const slots = ensureSlots(h, date);
+  slots[slotIndex] = !slots[slotIndex];
+  syncLogFromSlots(h, date);
+  store.set('habits', habits);
+  renderHabits();
+  renderHabitModal();
+}
+
 /* ============ МОДАЛКА ИСТОРИИ ПРИВЫЧКИ ============ */
 let detailHabitId = null;
 let detailYear = null;
@@ -320,6 +383,7 @@ function renderHabitDayDetail(h){
   const created = h.createdAt || '0000-01-01';
   const isFuture = day > todayStr();
   const isWeek = h.period === 'week';
+  const isDailyMulti = h.period === 'day' && h.target > 1;
 
   if(isFuture){
     detail.innerHTML = `
@@ -362,6 +426,39 @@ function renderHabitDayDetail(h){
     return;
   }
 
+  if(isDailyMulti){
+    const slots = ensureSlots(h, day);
+    const doneCount = slots.filter(Boolean).length;
+    const allDone = doneCount >= h.target;
+
+    let slotsHtml = '';
+    for(let i = 0; i < h.target; i++){
+      const on = slots[i];
+      slotsHtml += `<button class="slot-check${on ? ' done' : ''}" onclick="toggleSlot('${h.id}','${day}',${i})" title="Раз ${i+1}">${i+1}</button>`;
+    }
+
+    let status;
+    if(allDone) status = '✅ закрыто полностью';
+    else if(doneCount > 0) status = '⏳ частично';
+    else status = '❌ не отмечено';
+
+    const beforeHint = (day < created)
+      ? `<div class="dd-hint">💡 В приложении привычки тогда ещё не было, но можно отметить задним числом</div>`
+      : '';
+
+    detail.innerHTML = `
+      <div class="dd-date">${dateFmt}</div>
+      <div class="slot-checks">${slotsHtml}</div>
+      <div class="slot-status">${status} · ${doneCount} / ${h.target}</div>
+      ${beforeHint}
+      <div class="dd-quick">
+        <button onclick="habitSetDay('${h.id}','${day}',0)" ${doneCount>0?'':'disabled'}>Сбросить день</button>
+        <button class="accent" onclick="habitSetDay('${h.id}','${day}',${h.target})" ${!allDone?'':'disabled'}>Отметить всё</button>
+      </div>
+    `;
+    return;
+  }
+
   let status;
   if(val >= h.target) status = '✅ закрыто полностью';
   else if(val > 0) status = '⏳ частично';
@@ -388,6 +485,29 @@ function habitChangeDay(habitId, dateStr, delta){
   const h = habits.find(x => x.id === habitId);
   if(!h) return;
   if(dateStr > todayStr()) return;
+
+  // для "N раз в день" — через слоты
+  if(h.period === 'day' && h.target > 1){
+    const slots = ensureSlots(h, dateStr);
+    if(delta > 0){
+      const firstFalse = slots.indexOf(false);
+      if(firstFalse === -1) return;
+      slots[firstFalse] = true;
+    } else {
+      let lastTrue = -1;
+      for(let i = slots.length - 1; i >= 0; i--){
+        if(slots[i]){ lastTrue = i; break; }
+      }
+      if(lastTrue === -1) return;
+      slots[lastTrue] = false;
+    }
+    syncLogFromSlots(h, dateStr);
+    store.set('habits', habits);
+    renderHabits();
+    renderHabitModal();
+    return;
+  }
+
   if(!h.log) h.log = {};
   const cur = h.log[dateStr] || 0;
   let next = cur + delta;
@@ -404,6 +524,19 @@ function habitSetDay(habitId, dateStr, value){
   const h = habits.find(x => x.id === habitId);
   if(!h) return;
   if(dateStr > todayStr()) return;
+
+  // для "N раз в день" — через слоты
+  if(h.period === 'day' && h.target > 1){
+    const slots = ensureSlots(h, dateStr);
+    const target = Math.min(value, h.target);
+    for(let i = 0; i < slots.length; i++) slots[i] = i < target;
+    syncLogFromSlots(h, dateStr);
+    store.set('habits', habits);
+    renderHabits();
+    renderHabitModal();
+    return;
+  }
+
   if(!h.log) h.log = {};
   if(value <= 0) delete h.log[dateStr];
   else h.log[dateStr] = Math.min(value, h.target);
