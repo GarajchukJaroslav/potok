@@ -107,6 +107,18 @@ let currentManualType = store.get('manualCurrentType', 'want');
 habits.forEach(h => {
   if(!h.log) h.log = {};
   if(!h.createdAt) h.createdAt = todayStr();
+  // слоты для привычек "N раз в день" (N > 1)
+  if(h.period === 'day' && h.target > 1){
+    if(!h.slots) h.slots = {};
+    Object.keys(h.log).forEach(d => {
+      if(!h.slots[d]){
+        const n = h.log[d] || 0;
+        const arr = [];
+        for(let i = 0; i < h.target; i++) arr.push(i < n);
+        h.slots[d] = arr;
+      }
+    });
+  }
 });
 
 goals.forEach(g => {
@@ -130,7 +142,6 @@ checklistEvents.forEach(e => {
   if(e.resolvedAt === undefined) e.resolvedAt = null;
   if(e.childrenIds === undefined) e.childrenIds = null;
   if(e.mergedIntoId === undefined) e.mergedIntoId = null;
-  // старым manual-событиям без manualType -> 'want'
   if(e.source === 'manual' && !e.manualType) e.manualType = 'want';
 });
 
@@ -142,8 +153,6 @@ function getMergedChildren(e){
     .filter(Boolean);
 }
 
-/* Merged можно удалить без решения, только если ВСЕ дети — manual type 'want'.
-   manual 'result' и автоматические события — обязательны к анализу. */
 function isAllManualDeletableMerge(e){
   const kids = getMergedChildren(e);
   if(kids.length === 0) return false;
