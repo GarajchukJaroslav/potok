@@ -4,6 +4,12 @@
 
 function checkSystemBlock(){
   if(systemBlock.active){
+    // НЕ перерисовываем, если блок уже открыт.
+    // Иначе каждые 15 сек стирается ввод пользователя.
+    const overlay = document.getElementById('blockOverlay');
+    if(overlay && overlay.classList.contains('open')){
+      return;
+    }
     renderSystemBlock();
     return;
   }
@@ -13,7 +19,6 @@ function checkSystemBlock(){
     e.status === 'new' || e.status === 'in_progress'
   );
 
-  // 24h без реакции
   for(const e of active){
     if(e.status === 'new' && (now - e.createdAt) > EVENT_TIMEOUT_MS){
       triggerBlock('timeout_24h', [e.id]);
@@ -21,7 +26,6 @@ function checkSystemBlock(){
     }
   }
 
-  // Просрочка таймера анализа
   for(const e of active){
     if(e.status === 'in_progress' && e.analysisDeadline && now > e.analysisDeadline){
       triggerBlock('analysis_timeout', [e.id]);
@@ -37,16 +41,21 @@ function triggerBlock(reason, eventIds){
   systemBlock.events = eventIds;
   systemBlock.resolution = null;
   store.set('systemBlock', systemBlock);
-  renderSystemBlock();
+  renderSystemBlock(true); // force — стираем старое, рисуем новое
 }
 
-function renderSystemBlock(){
+function renderSystemBlock(force){
   const overlay = document.getElementById('blockOverlay');
   if(!overlay) return;
 
   if(!systemBlock.active){
     overlay.classList.remove('open');
     document.body.style.overflow = '';
+    return;
+  }
+
+  // Если уже открыт и не force — не трогаем содержимое (сохраняем ввод)
+  if(overlay.classList.contains('open') && !force){
     return;
   }
 
@@ -62,7 +71,6 @@ function renderSystemBlock(){
     ? '⏱ Анализ просрочен'
     : '⚠ Требуется внешняя помощь';
 
-  // Хелпер: как показать одно событие в блоке
   function eventBlockHtml(e){
     let src, title, detailHtml, childrenHtml = '';
 
@@ -110,7 +118,6 @@ function renderSystemBlock(){
 
   const eventsListHtml = blockedEvents.map(eventBlockHtml).join('');
 
-  // Форма решений: для merged — тоже строим label по смыслу
   const solutionsFormHtml = blockedEvents.map(e => {
     let label;
     if(e.source === 'merged'){
