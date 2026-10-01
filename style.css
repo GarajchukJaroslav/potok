@@ -1927,3 +1927,65 @@ body::after{
   color:var(--text); font-weight:500;
   word-break:break-word;
 }
+
+/* ============ СЛОТЫ ПРИВЫЧКИ "N РАЗ В ДЕНЬ" ============ */
+.slot-checks{
+  display:flex; gap:10px;
+  justify-content:center; align-items:center;
+  margin: 20px 0 14px;
+  flex-wrap: wrap;
+}
+
+.slot-check{
+  width:60px; height:60px;
+  border-radius:16px;
+  border:2px solid rgba(255,255,255,0.18);
+  background:rgba(255,255,255,0.03);
+  color:rgba(255,255,255,0.45);
+  font-family:inherit;
+  font-size:22px; font-weight:800;
+  letter-spacing:-0.5px;
+  cursor:pointer;
+  display:grid; place-items:center;
+  transition:all 0.18s;
+  position:relative;
+  user-select:none;
+}
+.slot-check:hover{
+  border-color:rgba(124,92,255,0.5);
+  background:rgba(124,92,255,0.08);
+  color:rgba(255,255,255,0.75);
+  transform:translateY(-1px);
+}
+.slot-check:active{ transform:scale(0.94); }
+
+.slot-check.done{
+  background:linear-gradient(135deg, var(--accent1), var(--accent2));
+  border-color:transparent;
+  color:#fff;
+  box-shadow:0 6px 20px rgba(124,92,255,0.4);
+}
+.slot-check.done::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  border-radius:14px;
+  background:linear-gradient(135deg, rgba(255,255,255,0.15), transparent 50%);
+  pointer-events:none;
+}
+.slot-check.done:hover{
+  transform:translateY(-2px);
+  box-shadow:0 10px 28px rgba(124,92,255,0.55);
+}
+
+.slot-status{
+  text-align:center;
+  font-size:13px; color:var(--muted);
+  margin-bottom:14px;
+  line-height:1.5;
+}
+
+@media(max-width:640px){
+  .slot-check{ width:52px; height:52px; font-size:19px; border-radius:14px; }
+  .slot-checks{ gap:8px; }
+}
