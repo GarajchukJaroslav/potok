@@ -1,5 +1,5 @@
 /* ==================================================================
-   НАВИГАЦИЯ + INIT
+   НАВИГАЦИЯ + INIT + PWA
 ================================================================== */
 
 const SCREENS = ['goals','routine','checklist','analysis'];
@@ -25,9 +25,7 @@ function goTo(index){
   if(location.hash.slice(1) !== v){
     history.replaceState(null, '', '#' + v);
   }
-  // при заходе на чеклист — перегенерируем события
   if(v === 'checklist' && typeof renderChecklist === 'function') renderChecklist();
-  // при заходе на анализ — рендерим
   if(v === 'analysis' && typeof renderAnalysis === 'function') renderAnalysis();
 }
 
@@ -36,10 +34,8 @@ function goUp(){ goTo(currentIndex - 1); }
 
 /* ============ INIT ============ */
 function init(){
-  // генерим события Чеклиста на старте
   if(typeof generateChecklistEvents === 'function') generateChecklistEvents();
 
-  // рендер всех вьюх
   renderGoalList();
   renderHabits();
   renderKanban();
@@ -52,7 +48,6 @@ function init(){
   currentIndex = startIdx >= 0 ? startIdx : 0;
   applyFlowTransform();
 
-  // обработчики
   const goalInput = document.getElementById('goalInput');
   if(goalInput) goalInput.addEventListener('keydown', e => {
     if(e.key === 'Enter') addGoal();
@@ -92,22 +87,28 @@ function init(){
   document.addEventListener('keydown', e => {
     if(e.key === 'Escape' && detailHabitId) closeHabitModal();
     if(detailHabitId) return;
-    // стрелки — только если фокус не в поле ввода
     const tag = (document.activeElement && document.activeElement.tagName) || '';
-    if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if(e.key === 'ArrowDown' || e.key === 'PageDown') goDown();
     if(e.key === 'ArrowUp'   || e.key === 'PageUp')   goUp();
   });
 
-  // глобальный тикер: проверка блока раз в 15 сек
   if(globalTicker) clearInterval(globalTicker);
   globalTicker = setInterval(() => {
     if(typeof generateChecklistEvents === 'function') generateChecklistEvents();
     if(typeof checkSystemBlock === 'function') checkSystemBlock();
   }, 15000);
 
-  // единоразовая проверка
   if(typeof checkSystemBlock === 'function') checkSystemBlock();
+
+  /* ============ PWA: регистрация Service Worker ============ */
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('SW зарегистрирован:', reg.scope))
+        .catch(err => console.warn('SW не зарегистрирован:', err));
+    });
+  }
 }
 
 init();
