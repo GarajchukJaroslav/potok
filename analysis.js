@@ -67,6 +67,65 @@ function updateTimerDisplay(el){
   else if(left < 5*60000) el.classList.add('warning');
 }
 
+/* ---------- ХЕЛПЕР: ОТКУДА ПРИШЛО СОБЫТИЕ ---------- */
+function sourceMeta(source, manualType){
+  if(source === 'habit')  return { icon:'🎯', label:'ЗОЖ',       cls:'habit' };
+  if(source === 'kanban') return { icon:'📋', label:'Канбан',    cls:'kanban' };
+  if(source === 'merged') return { icon:'🔗', label:'Объединено', cls:'merged' };
+  if(source === 'manual' && manualType === 'result')
+                          return { icon:'🎯', label:'Результат', cls:'result' };
+  if(source === 'manual') return { icon:'💭', label:'Своё',       cls:'manual' };
+  return { icon:'•', label:'Событие', cls:'other' };
+}
+
+/* HTML-блок «откуда это пришло» */
+function renderEventOrigin(event){
+  if(!event){
+    return `<div class="origin-empty">без привязки к событию</div>`;
+  }
+
+  // merged
+  if(event.source === 'merged'){
+    const kids = getMergedChildren(event);
+    const kidsHtml = kids.map(k => {
+      const meta = sourceMeta(k.source, k.manualType);
+      return `<div class="origin-child">
+        <span class="origin-child-icon">${meta.icon}</span>
+        <span class="origin-child-label">${meta.label}</span>
+        <span class="origin-child-title">${escapeHtml(k.title || '(без названия)')}</span>
+      </div>`;
+    }).join('');
+    return `
+      <div class="origin-row">
+        <span class="origin-source merged">🔗 Объединено</span>
+        <span class="origin-date">${fmtEventDate(event.date)}</span>
+      </div>
+      <div class="origin-title">${kids.length} ${plural(kids.length,'событие','события','событий')}</div>
+      <div class="origin-children">${kidsHtml}</div>
+    `;
+  }
+
+  // обычное событие
+  const meta = sourceMeta(event.source, event.manualType);
+  const crumbHtml = event.crumb
+    ? `<div class="origin-crumb">${escapeHtml(event.crumb)}</div>`
+    : '';
+  return `
+    <div class="origin-row">
+      <span class="origin-source ${meta.cls}">${meta.icon} ${meta.label}</span>
+      <span class="origin-date">${fmtEventDate(event.date)}</span>
+    </div>
+    <div class="origin-title">${escapeHtml(event.title || '(без названия)')}</div>
+    ${crumbHtml}
+  `;
+}
+
+/* Найти событие, к которому относится мысль */
+function findThoughtEvent(t){
+  if(!t || !t.fromEvent) return null;
+  return checklistEvents.find(x => x.id === t.fromEvent) || null;
+}
+
 /* ---------- MERGE UI ---------- */
 function toggleMergeSelect(eventId){
   if(selectedForMerge.has(eventId)) selectedForMerge.delete(eventId);
@@ -164,8 +223,8 @@ function createMergedEvent(){
 
 /* ---------- РЕНДЕР ЭКРАНА ---------- */
 function renderAnalysis(){
-   refreshNumbers();
-   
+  refreshNumbers();
+
   const isFocused = !!activeAnalysisEventId;
   const focusEl = document.getElementById('analysisFocus');
   const homeEl = document.getElementById('analysisHome');
@@ -204,11 +263,9 @@ function renderAnalysisFocus(e){
   if(isMerged){
     const kids = getMergedChildren(e);
     const kidsHtml = kids.map(k => {
-      const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : '💭');
-      const label = k.source === 'habit' ? 'ЗОЖ'
-                  : (k.source === 'kanban' ? 'Канбан' : 'Своё');
+      const meta = sourceMeta(k.source, k.manualType);
       const crumb = k.crumb ? ` <span class="focus-kid-crumb">· ${escapeHtml(k.crumb)}</span>` : '';
-      return `<div class="focus-kid"><span class="focus-kid-icon">${icon}</span><span class="focus-kid-label">${label}</span><span class="focus-kid-title">${escapeHtml(k.title)}</span>${crumb}</div>`;
+      return `<div class="focus-kid"><span class="focus-kid-icon">${meta.icon}</span><span class="focus-kid-label">${meta.label}</span><span class="focus-kid-title">${escapeHtml(k.title)}</span>${crumb}</div>`;
     }).join('');
 
     headerHtml = `
@@ -219,17 +276,12 @@ function renderAnalysisFocus(e){
       <div class="focus-kids">${kidsHtml}</div>
     `;
   } else {
-    let sourceLabel, sourceIcon;
-    if(e.source === 'habit'){ sourceLabel = 'ЗОЖ'; sourceIcon = '🎯'; }
-    else if(e.source === 'kanban'){ sourceLabel = 'Канбан'; sourceIcon = '📋'; }
-    else if(isManualResult){ sourceLabel = 'Результат'; sourceIcon = '🎯'; }
-    else { sourceLabel = 'Своё'; sourceIcon = '💭'; }
-
+    const meta = sourceMeta(e.source, e.manualType);
     const crumb = e.crumb ? `<div class="focus-event-crumb">${escapeHtml(e.crumb)}</div>` : '';
     headerHtml = `
       <div class="focus-event-meta">
         <span class="event-date">${fmtEventDate(e.date)}</span>
-        <span class="event-source ${e.source}">${sourceIcon} ${sourceLabel}</span>
+        <span class="event-source ${meta.cls}">${meta.icon} ${meta.label}</span>
       </div>
       <div class="focus-event-title">${escapeHtml(e.title)}</div>
       ${crumb}
@@ -237,7 +289,6 @@ function renderAnalysisFocus(e){
     `;
   }
 
-  // Удалить без решения можно ТОЛЬКО для manual-want и merged, где все дети want.
   const canDelete = isManualWant || (isMerged && isAllManualDeletableMerge(e));
 
   const placeholder = isManualResult
@@ -294,13 +345,7 @@ function renderAnalysisHome(){
   const eventsHtml = active.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">✨</span>Нет активных событий</div>`
     : active.map(e => {
-        let src;
-        if(e.source === 'habit') src = '🎯 ЗОЖ';
-        else if(e.source === 'kanban') src = '📋 Канбан';
-        else if(e.source === 'merged') src = '🔗 Объединено';
-        else if(e.source === 'manual' && e.manualType === 'result') src = '🎯 Результат';
-        else src = '💭 Своё';
-
+        const meta = sourceMeta(e.source, e.manualType);
         const label = e.status === 'in_progress' ? 'Продолжить' : 'Принять меры';
         const click = e.status === 'in_progress'
           ? `resumeAnalysisFromEvent('${e.id}')`
@@ -321,7 +366,7 @@ function renderAnalysisHome(){
             <div class="home-event-row">
               ${canSelect ? `<div class="merge-checkbox ${checked}" onclick="toggleMergeSelect('${e.id}')"></div>` : ''}
               <span class="home-event-date">${fmtEventDate(e.date)}</span>
-              <span class="home-event-source">${src}</span>
+              <span class="home-event-source">${meta.icon} ${meta.label}</span>
             </div>
             <div class="home-event-title">${title}</div>
             <div class="home-event-detail">${detail}</div>
@@ -329,20 +374,26 @@ function renderAnalysisHome(){
           </div>`;
       }).join('');
 
+  // ---------- История анализа (мысли) ----------
   const thoughtsHtml = thoughts.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">📝</span>Пока пусто</div>`
     : thoughts.map(t => {
         const num = thoughtNums[t.id] || '?';
         const dt = new Date(t.date);
         const dateStr = dt.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
+        const event = findThoughtEvent(t);
+        const originHtml = renderEventOrigin(event);
+
         const ruleBadges = (t.rules || []).map(rid => {
           const r = rules.find(x => x.id === rid);
           if(!r) return '';
           return `<div class="rule-badge">→ ${escapeHtml(r.text)}</div>`;
         }).join('');
+
         return `
           <div class="thought">
-            <div>${escapeHtml(t.text)}</div>
+            <div class="thought-text">${escapeHtml(t.text)}</div>
+            <div class="origin-block">${originHtml}</div>
             ${ruleBadges}
             <div class="thought-meta">
               <div class="thought-meta-left">
@@ -353,24 +404,25 @@ function renderAnalysisHome(){
           </div>`;
       }).join('');
 
+  // ---------- Действия (правила) ----------
   const rulesHtml = rules.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">⚡</span>Нет действий</div>`
     : rules.map(r => {
         const num = ruleNums[r.id] || '?';
-        const origin = r.from
-          ? (() => {
-              const t = thoughts.find(x => x.id === r.from);
-              if(!t) return '';
-              const tn = thoughtNums[t.id] || '?';
-              return `<div class="rule-origin">из анализа #${tn}: ${escapeHtml(t.text.slice(0,100))}${t.text.length>100?'…':''}</div>`;
-            })()
+        const thought = r.from ? thoughts.find(x => x.id === r.from) : null;
+        const event = thought ? findThoughtEvent(thought) : null;
+        const originHtml = renderEventOrigin(event);
+        const fromNumHtml = thought
+          ? `<div class="origin-from">из анализа #${thoughtNums[thought.id] || '?'}</div>`
           : '';
+
         return `
           <div class="rule">
             <div class="rule-num">${num}</div>
             <div class="rule-body">
-              <div>${escapeHtml(r.text)}</div>
-              ${origin}
+              <div class="rule-text">${escapeHtml(r.text)}</div>
+              <div class="origin-block">${originHtml}</div>
+              ${fromNumHtml}
             </div>
           </div>`;
       }).join('');
@@ -455,7 +507,6 @@ function deleteManualAnalysis(){
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
 
-  // Удалять можно ТОЛЬКО manual-want или merged, где все дети want.
   const canDelete =
     (e.source === 'manual' && e.manualType === 'want') ||
     (e.source === 'merged' && isAllManualDeletableMerge(e));
