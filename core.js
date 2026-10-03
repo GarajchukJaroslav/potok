@@ -120,7 +120,6 @@ function blockedAfterStart(){
 habits.forEach(h => {
   if(!h.log) h.log = {};
   if(!h.createdAt) h.createdAt = todayStr();
-  // слоты для привычек "N раз в день" (N > 1)
   if(h.period === 'day' && h.target > 1){
     if(!h.slots) h.slots = {};
     Object.keys(h.log).forEach(d => {
@@ -145,6 +144,14 @@ goals.forEach(g => {
       if(ss.deadline === undefined) ss.deadline = null;
       if(ss.status === undefined) ss.status = 'todo';
     });
+    // result + resultChecked
+    if(s.result === undefined) s.result = '';
+    if(s.resultChecked === undefined){
+      // для старых выполненных шагов не триггерим вопросы
+      s.resultChecked = (stepEffectiveStatus(s) === 'done');
+    }
+    if(s.resultAchieved === undefined) s.resultAchieved = null;
+    if(s.resultEventId === undefined) s.resultEventId = null;
   });
 });
 
@@ -156,6 +163,7 @@ checklistEvents.forEach(e => {
   if(e.childrenIds === undefined) e.childrenIds = null;
   if(e.mergedIntoId === undefined) e.mergedIntoId = null;
   if(e.source === 'manual' && !e.manualType) e.manualType = 'want';
+  if(e.source === 'result' && e.achieved === undefined) e.achieved = true;
 });
 
 /* ============ ХЕЛПЕРЫ MERGED ============ */
@@ -197,7 +205,6 @@ function resolveEvent(eventId, solution){
 function unmergeEvent(mergedId){
   const e = checklistEvents.find(x => x.id === mergedId);
   if(!e || e.source !== 'merged') return;
-
   if(Array.isArray(e.childrenIds)){
     e.childrenIds.forEach(cid => {
       const c = checklistEvents.find(x => x.id === cid);
