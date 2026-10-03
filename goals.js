@@ -1,11 +1,13 @@
 /* ==================================================================
-   ЭКРАН «ЦЕЛИ» — цель → шаг → подшаг + режим СТАРТ
+   ЭКРАН «ЦЕЛИ» — цель → шаг (с результатом) → подшаг
 ================================================================== */
 
 let expandedGoals = new Set(store.get('expandedGoals', []));
 let expandedSteps = new Set(store.get('expandedSteps', []));
+let pendingResultCheck = null; // { goalId, stepId }
+let promptedThisSession = new Set();
 
-/* ---------- СТАРТ СИСТЕМЫ ---------- */
+/* ---------- СТАРТ ---------- */
 function startPotok(){
   if(goals.length === 0 && habits.length === 0){
     alert('Создай хотя бы одну цель или привычку, прежде чем стартовать');
@@ -22,12 +24,12 @@ function startPotok(){
   renderKanban();
   if(typeof renderChecklist === 'function') renderChecklist();
   if(typeof renderAnalysis === 'function') renderAnalysis();
+  setTimeout(checkPendingResultChecks, 500);
 }
 
 function renderStartBlock(){
   const el = document.getElementById('startBlock');
   if(!el) return;
-
   if(isStarted()){
     el.innerHTML = `
       <div class="start-status">
@@ -47,7 +49,6 @@ function renderStartBlock(){
       </div>
     `;
   }
-
   const bar = document.getElementById('goalsBar');
   if(bar) bar.style.display = isStarted() ? 'none' : 'flex';
 }
@@ -66,12 +67,8 @@ function addGoal(){
     return;
   }
   goals.push({
-    id: uid(),
-    text: v,
-    done: false,
-    deadline,
-    steps: [],
-    date: new Date().toISOString()
+    id: uid(), text: v, done: false, deadline,
+    steps: [], date: new Date().toISOString()
   });
   inp.value = '';
   if(dlInp) dlInp.value = '';
@@ -129,10 +126,17 @@ function addStep(goalId){
   if(!canPlan()){ blockedAfterStart(); return; }
   const inp = document.querySelector(`[data-step-input="${goalId}"]`);
   const dlInp = document.querySelector(`[data-step-deadline="${goalId}"]`);
+  const resInp = document.querySelector(`[data-step-result="${goalId}"]`);
   if(!inp) return;
   const v = inp.value.trim();
   const deadline = dlInp ? dlInp.value : '';
+  const result = resInp ? resInp.value.trim() : '';
   if(!v) return;
+  if(!result){
+    alert('Укажи результат шага');
+    if(resInp) resInp.focus();
+    return;
+  }
   if(!deadline){
     alert('Укажи дедлайн шага');
     if(dlInp) dlInp.focus();
@@ -142,15 +146,17 @@ function addStep(goalId){
   if(!g) return;
   if(!Array.isArray(g.steps)) g.steps = [];
   g.steps.push({
-    id: uid(),
-    text: v,
-    status: 'todo',
-    lastStatus: 'todo',
-    deadline,
-    substeps: []
+    id: uid(), text: v,
+    result: result,
+    resultChecked: false,
+    resultAchieved: null,
+    resultEventId: null,
+    status: 'todo', lastStatus: 'todo',
+    deadline, substeps: []
   });
   inp.value = '';
   if(dlInp) dlInp.value = '';
+  if(resInp) resInp.value = '';
   store.set('goals', goals);
   renderGoalList();
   if(typeof renderKanban === 'function') renderKanban();
@@ -166,7 +172,8 @@ function toggleStep(goalId, stepId){
   if(!g) return;
   const s = g.steps.find(x => x.id === stepId);
   if(!s) return;
-  if(s.substeps && s.substeps.length > 0) return;
+  if(s.substeps && s.substeps.length > 0) return; // контейнер не кликается
+
   if(s.status === 'done'){
     s.status = s.lastStatus || 'todo';
   } else {
@@ -176,6 +183,8 @@ function toggleStep(goalId, stepId){
   store.set('goals', goals);
   renderGoalList();
   if(typeof renderKanban === 'function') renderKanban();
+
+  if(s.status === 'done') setTimeout(checkPendingResultChecks, 100);
 }
 
 function delStep(goalId, stepId){
@@ -201,6 +210,17 @@ function setStepDeadline(goalId, stepId, value){
   store.set('goals', goals);
   renderGoalList();
   if(typeof renderKanban === 'function') renderKanban();
+}
+
+function setStepResult(goalId, stepId, value){
+  if(!canPlan()){ renderGoalList(); return; }
+  const g = goals.find(x => x.id === goalId);
+  if(!g) return;
+  const s = g.steps.find(x => x.id === stepId);
+  if(!s) return;
+  s.result = value;
+  store.set('goals', goals);
+  renderGoalList();
 }
 
 function toggleExpandStep(goalId, stepId){
@@ -238,11 +258,7 @@ function addSubstep(goalId, stepId){
   if(!s) return;
   if(!Array.isArray(s.substeps)) s.substeps = [];
   s.substeps.push({
-    id: uid(),
-    text: v,
-    status: 'todo',
-    lastStatus: 'todo',
-    deadline
+    id: uid(), text: v, status: 'todo', lastStatus: 'todo', deadline
   });
   inp.value = '';
   if(dlInp) dlInp.value = '';
@@ -272,6 +288,7 @@ function toggleSubstep(goalId, stepId, substepId){
   store.set('goals', goals);
   renderGoalList();
   if(typeof renderKanban === 'function') renderKanban();
+  setTimeout(checkPendingResultChecks, 100);
 }
 
 function delSubstep(goalId, stepId, substepId){
@@ -299,6 +316,91 @@ function setSubstepDeadline(goalId, stepId, substepId, value){
   store.set('goals', goals);
   renderGoalList();
   if(typeof renderKanban === 'function') renderKanban();
+}
+
+/* ---------- РЕЗУЛЬТАТ: ПРОВЕРКА ---------- */
+function checkPendingResultChecks(){
+  if(!isStarted()) return;
+  for(const g of goals){
+    for(const s of (g.steps || [])){
+      const eff = stepEffectiveStatus(s);
+      if(eff !== 'done') continue;
+      if(!s.result) continue;
+      if(s.resultChecked) continue;
+      if(promptedThisSession.has(s.id)) continue;
+
+      promptedThisSession.add(s.id);
+      openResultCheck(g.id, s.id);
+      return;
+    }
+  }
+}
+
+function openResultCheck(goalId, stepId){
+  const g = goals.find(x => x.id === goalId);
+  if(!g) return;
+  const s = g.steps.find(x => x.id === stepId);
+  if(!s) return;
+
+  pendingResultCheck = { goalId, stepId };
+
+  const stepEl = document.getElementById('resultCheckStep');
+  const expEl = document.getElementById('resultCheckExpected');
+  if(stepEl) stepEl.textContent = s.text;
+  if(expEl) expEl.textContent = s.result;
+
+  document.getElementById('resultCheckOverlay').classList.add('open');
+}
+
+function answerResultCheck(achieved){
+  if(!pendingResultCheck) return;
+  const { goalId, stepId } = pendingResultCheck;
+  const g = goals.find(x => x.id === goalId);
+  if(!g) return;
+  const s = g.steps.find(x => x.id === stepId);
+  if(!s) return;
+
+  s.resultChecked = true;
+  s.resultAchieved = achieved;
+
+  // создаём событие
+  const now = Date.now();
+  const event = {
+    id: uid(),
+    date: todayStr(),
+    source: 'result',
+    refId: stepId,
+    goalId,
+    stepId,
+    achieved: achieved,
+    title: s.text,
+    detail: achieved ? 'результат достигнут: ' + s.result : 'результат НЕ достигнут: ' + s.result,
+    crumb: g.text,
+    createdAt: now,
+    status: 'new',
+    analysisId: null,
+    analysisStartedAt: null,
+    analysisDeadline: null,
+    resolvedAt: null,
+    solution: null,
+    childrenIds: null,
+    mergedIntoId: null,
+    manualType: null
+  };
+
+  checklistEvents.push(event);
+  s.resultEventId = event.id;
+
+  store.set('goals', goals);
+  store.set('checklistEvents', checklistEvents);
+
+  pendingResultCheck = null;
+  document.getElementById('resultCheckOverlay').classList.remove('open');
+
+  renderGoalList();
+  if(typeof renderKanban === 'function') renderKanban();
+  if(typeof renderChecklist === 'function') renderChecklist();
+  if(typeof renderAnalysis === 'function') renderAnalysis();
 }
 
 /* ---------- РЕНДЕР ---------- */
@@ -342,6 +444,7 @@ function renderGoalList(){
       ? ''
       : `<div class="step-add">
            <input name="step-text-${g.id}" data-step-input="${g.id}" placeholder="Новый шаг..." maxlength="200">
+           <input name="step-result-${g.id}" data-step-result="${g.id}" placeholder="Результат (что должно получиться)" maxlength="200">
            <input name="step-dl-${g.id}" type="date" data-step-deadline="${g.id}" title="Дедлайн (обязательно)">
            <button onclick="event.stopPropagation(); addStep('${g.id}')">+</button>
          </div>`;
@@ -407,6 +510,18 @@ function renderStep(goalId, s){
         onclick="event.stopPropagation()"
         onchange="setStepDeadline('${goalId}','${s.id}', this.value)">`;
 
+  // Результат: редактируемый до старта / статичный после
+  const resultValue = s.result || '';
+  const resultEl = locked
+    ? `<div class="step-result"><span class="step-result-label">Результат:</span> <span class="step-result-text">${escapeHtml(resultValue || '—')}</span></div>`
+    : `<div class="step-result-edit" onclick="event.stopPropagation()">
+         <span class="step-result-label">Результат:</span>
+         <input class="step-result-input" type="text" value="${escapeHtml(resultValue)}"
+           onclick="event.stopPropagation()"
+           onchange="setStepResult('${goalId}','${s.id}', this.value)"
+           placeholder="Результат (что должно получиться)">
+       </div>`;
+
   const subsHtml = subs.map(ss => renderSubstep(goalId, s.id, ss)).join('');
   const closedCount = subs.filter(x => x.status === 'done').length;
 
@@ -450,7 +565,10 @@ function renderStep(goalId, s){
   return `
     <div class="${stepClass}">
       ${checkEl}
-      <div class="step-text">${escapeHtml(s.text)}</div>
+      <div class="step-content">
+        <div class="step-text">${escapeHtml(s.text)}</div>
+        ${resultEl}
+      </div>
       ${countEl}
       ${dateEl}
       ${toggleBtn}
