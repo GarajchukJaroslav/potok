@@ -16,7 +16,6 @@ function collectKanbanTasks(){
     (g.steps || []).forEach(step => {
       const subs = step.substeps || [];
       if(subs.length > 0){
-        // контейнер — показываем подшаги
         subs.forEach(ss => {
           tasks.push({
             goalId: g.id,
@@ -29,7 +28,6 @@ function collectKanbanTasks(){
           });
         });
       } else {
-        // leaf-шаг — показываем сам шаг
         tasks.push({
           goalId: g.id,
           stepId: step.id,
@@ -42,8 +40,6 @@ function collectKanbanTasks(){
       }
     });
   });
-
-  // сортировка: срочные сверху, без дедлайна — вниз
   tasks.sort((a, b) => deadlineTime(a.deadline) - deadlineTime(b.deadline));
   return tasks;
 }
@@ -109,7 +105,7 @@ function kanbanCard(t, colKey){
 }
 
 function moveTask(goalId, stepId, substepId, direction){
-  if(!canExecute()){ blockedBeforeStart(); return; } 
+  if(!canExecute()){ blockedBeforeStart(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   const step = g.steps.find(x => x.id === stepId);
@@ -129,10 +125,16 @@ function moveTask(goalId, stepId, substepId, direction){
   if(next === cur) return;
 
   const prev = order[cur];
+  const wasDone = entity.status === 'done';
   entity.status = order[next];
   if(entity.status === 'done') entity.lastStatus = prev;
 
   store.set('goals', goals);
   renderKanban();
   renderGoalList();
+
+  // Если шаг только что стал done — проверяем результат
+  if(!wasDone && entity.status === 'done'){
+    setTimeout(checkPendingResultChecks, 100);
+  }
 }
