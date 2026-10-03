@@ -1,6 +1,5 @@
 /* ==================================================================
    ЭКРАН «АНАЛИЗ → ДЕЙСТВИЯ»
-   Событие-фокус, таймер 15 мин, объединение событий, структурные действия.
 ================================================================== */
 
 let activeAnalysisEventId = null;
@@ -18,6 +17,7 @@ function startAnalysisFromEvent(eventId){
   e.status = 'in_progress';
   e.analysisStartedAt = now;
   e.analysisDeadline = now + ANALYSIS_TIMEOUT_MS;
+  if(!Array.isArray(e.draftActions)) e.draftActions = [];
   store.set('checklistEvents', checklistEvents);
 
   activeAnalysisEventId = eventId;
@@ -124,7 +124,7 @@ function findThoughtEvent(t){
   return checklistEvents.find(x => x.id === t.fromEvent) || null;
 }
 
-/* ---------- MERGE UI ---------- */
+/* ---------- MERGE ---------- */
 function toggleMergeSelect(eventId){
   if(selectedForMerge.has(eventId)) selectedForMerge.delete(eventId);
   else selectedForMerge.add(eventId);
@@ -143,17 +143,13 @@ function updateHomeCheckboxes(){
 function renderMergePanel(){
   const host = document.getElementById('mergePanelHost');
   if(!host) return;
-
   if(selectedForMerge.size < 2){
     host.innerHTML = '';
     return;
   }
-
   host.innerHTML = `
     <div class="merge-panel">
-      <div class="merge-count">
-        Выбрано: <b>${selectedForMerge.size}</b>
-      </div>
+      <div class="merge-count">Выбрано: <b>${selectedForMerge.size}</b></div>
       <button class="merge-btn-cancel" onclick="clearMergeSelection()">Отмена</button>
       <button class="merge-btn-go" onclick="createMergedEvent()">Объединить и анализировать</button>
     </div>
@@ -169,21 +165,17 @@ function clearMergeSelection(){
 function createMergedEvent(){
   const ids = [...selectedForMerge];
   if(ids.length < 2) return;
-
   const children = ids
     .map(id => checklistEvents.find(x => x.id === id))
     .filter(Boolean)
     .filter(e => e.status === 'new');
-
   if(children.length < 2){
     alert('Можно объединять только новые события');
     clearMergeSelection();
     return;
   }
-
   const minCreatedAt = Math.min(...children.map(c => c.createdAt || Date.now()));
   const minDate = children.map(c => c.date).sort()[0];
-
   const merged = {
     id: uid(),
     date: minDate,
@@ -200,20 +192,17 @@ function createMergedEvent(){
     solution: null,
     childrenIds: children.map(c => c.id),
     mergedIntoId: null,
-    manualType: null
+    manualType: null,
+    draftActions: []
   };
-
   children.forEach(c => {
     c.status = 'merged';
     c.mergedIntoId = merged.id;
   });
-
   checklistEvents.push(merged);
   store.set('checklistEvents', checklistEvents);
-
   selectedForMerge.clear();
   activeAnalysisEventId = merged.id;
-
   renderAnalysis();
   startAnalysisTicker();
   if(typeof renderChecklist === 'function') renderChecklist();
@@ -265,7 +254,6 @@ function renderAnalysisFocus(e){
       const crumb = k.crumb ? ` <span class="focus-kid-crumb">· ${escapeHtml(k.crumb)}</span>` : '';
       return `<div class="focus-kid"><span class="focus-kid-icon">${meta.icon}</span><span class="focus-kid-label">${meta.label}</span><span class="focus-kid-title">${escapeHtml(k.title)}</span>${crumb}</div>`;
     }).join('');
-
     headerHtml = `
       <div class="focus-event-meta">
         <span class="event-source merged">🔗 Объединённый анализ</span>
@@ -310,20 +298,9 @@ function renderAnalysisFocus(e){
         </div>
 
         <div class="focus-field">
-          <label class="focus-label">Действие</label>
-          <select class="focus-action-select" id="focusActionSelect" onchange="onActionTypeChange(this.value)">
-            <option value="">— выбери действие —</option>
-            <option value="note">📝 Добавить заметку к шагу / привычке</option>
-            <option value="add_step">➕ Добавить шаг к цели</option>
-            <option value="add_substep">➕ Добавить подшаг</option>
-            <option value="add_habit">➕ Добавить привычку</option>
-            <option value="del_step">🗑 Удалить шаг</option>
-            <option value="del_substep">🗑 Удалить подшаг</option>
-            <option value="del_habit">🗑 Удалить привычку</option>
-            <option value="shift_step_deadline">📅 Сдвинуть дедлайн шага</option>
-            <option value="shift_substep_deadline">📅 Сдвинуть дедлайн подшага</option>
-          </select>
-          <div id="focusActionForm" class="focus-action-form"></div>
+          <label class="focus-label">Действия</label>
+          <div id="focusActionList" class="focus-action-list"></div>
+          <button class="add-action-btn" onclick="openActionPicker()">+ Добавить действие</button>
         </div>
       </div>
 
@@ -338,10 +315,20 @@ function renderAnalysisFocus(e){
   const timer = document.getElementById('focusTimer');
   if(timer) updateTimerDisplay(timer);
 
+  // Заполняем textarea текстом, если уже писали (не сохраняя — пользователь в праве стереть)
   const noteEl = document.getElementById('focusNote');
-  if(noteEl) noteEl.addEventListener('keydown', ev => {
-    if(ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) saveAnalysis();
-  });
+  if(noteEl){
+    if(e.draftNote) noteEl.value = e.draftNote;
+    noteEl.addEventListener('input', () => {
+      e.draftNote = noteEl.value;
+      store.set('checklistEvents', checklistEvents);
+    });
+    noteEl.addEventListener('keydown', ev => {
+      if(ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) saveAnalysis();
+    });
+  }
+
+  renderActionList();
 }
 
 function renderAnalysisHome(){
@@ -390,13 +377,11 @@ function renderAnalysisHome(){
         const dateStr = dt.toLocaleDateString('ru-RU', { day:'numeric', month:'short' });
         const event = findThoughtEvent(t);
         const originHtml = renderEventOrigin(event);
-
         const ruleBadges = (t.rules || []).map(rid => {
           const r = rules.find(x => x.id === rid);
           if(!r) return '';
           return `<div class="rule-badge">→ ${escapeHtml(r.text)}</div>`;
         }).join('');
-
         return `
           <div class="thought">
             <div class="thought-text">${escapeHtml(t.text)}</div>
@@ -421,12 +406,12 @@ function renderAnalysisHome(){
         const fromNumHtml = thought
           ? `<div class="origin-from">из анализа #${thoughtNums[thought.id] || '?'}</div>`
           : '';
-
+        const lines = (r.text || '').split('\n').map(l => `<div>${escapeHtml(l)}</div>`).join('');
         return `
           <div class="rule">
             <div class="rule-num">${num}</div>
             <div class="rule-body">
-              <div class="rule-text">${escapeHtml(r.text)}</div>
+              <div class="rule-text">${lines}</div>
               <div class="origin-block">${originHtml}</div>
               ${fromNumHtml}
             </div>
@@ -457,13 +442,6 @@ function saveAnalysis(){
   const note = noteEl.value.trim();
   if(!note){ alert('Напиши анализ проблемы'); noteEl.focus(); return; }
 
-  const actionSelect = document.getElementById('focusActionSelect');
-  const actionType = actionSelect ? actionSelect.value : '';
-  if(!actionType){ alert('Выбери действие'); if(actionSelect) actionSelect.focus(); return; }
-
-  const actionData = collectActionData(actionType);
-  if(!actionData) return;
-
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
 
@@ -472,14 +450,25 @@ function saveAnalysis(){
     return;
   }
 
-  // Сначала вытаскиваем описание действия (пока данные не изменились)
-  const actionText = describeAction(actionType, actionData);
+  const draft = e.draftActions || [];
+  if(draft.length === 0){
+    alert('Добавь хотя бы одно действие');
+    return;
+  }
 
-  // Выполняем структурное действие
-  const ok = executeAction(actionType, actionData);
-  if(!ok){ alert('Не удалось выполнить действие'); return; }
+  // Описания уже в draft — берём их
+  const actionLines = draft.map(a => a.description);
 
-  // Создаём мысль и правило
+  // Выполняем все действия
+  for(const a of draft){
+    const ok = executeAction(a.type, a.data);
+    if(!ok){
+      alert('Не удалось выполнить действие: ' + a.description);
+      return;
+    }
+  }
+
+  // Мысль + правило
   const thought = {
     id: uid(),
     text: note,
@@ -491,22 +480,23 @@ function saveAnalysis(){
 
   const rule = {
     id: uid(),
-    text: actionText,
+    text: actionLines.join('\n'),
     from: thought.id,
     date: new Date().toISOString(),
-    actionType,
-    actionData
+    actions: draft.map(a => ({ type: a.type, data: a.data }))
   };
   rules.unshift(rule);
   thought.rules.push(rule.id);
 
   e.analysisId = thought.id;
+  e.draftActions = [];
+  e.draftNote = '';
 
   store.set('thoughts', thoughts);
   store.set('rules', rules);
   store.set('checklistEvents', checklistEvents);
 
-  resolveEvent(e.id, actionText);
+  resolveEvent(e.id, actionLines.join('\n'));
 
   activeAnalysisEventId = null;
   stopAnalysisTicker();
