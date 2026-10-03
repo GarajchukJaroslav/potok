@@ -164,6 +164,8 @@ function createMergedEvent(){
 
 /* ---------- РЕНДЕР ЭКРАНА ---------- */
 function renderAnalysis(){
+   refreshNumbers();
+   
   const isFocused = !!activeAnalysisEventId;
   const focusEl = document.getElementById('analysisFocus');
   const homeEl = document.getElementById('analysisHome');
