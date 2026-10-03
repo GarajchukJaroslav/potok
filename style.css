@@ -2492,3 +2492,158 @@ body::after{
   .action-select, .action-input, .action-textarea{ font-size: 12.5px; }
   .action-card-text{ font-size: 12.5px; }
 }
+
+
+/* ============ РЕЗУЛЬТАТ ШАГА ============ */
+.step-content{
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: center;
+}
+
+.step-result,
+.step-result-edit{
+  border-left: 1px solid rgba(255,255,255,0.08);
+  padding-left: 20px;
+  font-size: 13px;
+  min-width: 0;
+}
+.step-result-label{
+  color: var(--muted);
+  font-weight: 500;
+  margin-right: 6px;
+}
+.step-result-text{
+  color: #8ad4ff;
+  font-weight: 600;
+  word-break: break-word;
+}
+.step-result-input{
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed rgba(255,255,255,0.15);
+  color: #8ad4ff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 0;
+  outline: none;
+  width: 100%;
+  min-width: 0;
+  transition: border-color 0.15s;
+}
+.step-result-input:focus{
+  border-bottom-color: rgba(0,217,255,0.6);
+}
+.step-result-input::placeholder{
+  color: var(--muted);
+  font-weight: 400;
+  font-style: italic;
+}
+
+@media(max-width: 700px){
+  .step-content{
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .step-result,
+  .step-result-edit{
+    border-left: none;
+    padding-left: 0;
+  }
+}
+
+/* В форме добавления шага — обёртка для result чтобы влезло */
+.step-add input[data-step-result]{
+  flex: 1.2;
+}
+
+/* ============ МОДАЛКА РЕЗУЛЬТАТА ============ */
+.result-check-modal{
+  max-width: 460px;
+}
+.result-check-body{
+  padding: 8px 0 20px;
+}
+.result-check-step{
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+  letter-spacing: -0.2px;
+  word-break: break-word;
+}
+.result-check-expected{
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: rgba(0,217,255,0.06);
+  border: 1px solid rgba(0,217,255,0.2);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #8ad4ff;
+}
+.result-check-label{
+  color: var(--muted);
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.manual-btn.danger{
+  background: linear-gradient(135deg, rgba(255,77,109,0.18), rgba(255,77,109,0.08));
+  border: 1px solid rgba(255,77,109,0.45);
+  color: #ff8f9c;
+  font-weight: 700;
+}
+.manual-btn.danger:hover{
+  background: linear-gradient(135deg, rgba(255,77,109,0.32), rgba(255,77,109,0.15));
+  color: #fff;
+}
+.manual-btn.success{
+  background: linear-gradient(135deg, rgba(34,214,127,0.2), rgba(34,214,127,0.08));
+  border: 1px solid rgba(34,214,127,0.5);
+  color: #6ee8b0;
+  font-weight: 700;
+}
+.manual-btn.success:hover{
+  background: linear-gradient(135deg, rgba(34,214,127,0.35), rgba(34,214,127,0.18));
+  color: #fff;
+}
+
+/* ============ RESULT-СОБЫТИЕ В ЧЕКЛИСТЕ ============ */
+.checklist-event.result-event.result-achieved{
+  background: linear-gradient(135deg, rgba(34,214,127,0.06), rgba(34,214,127,0.02));
+  border-color: rgba(34,214,127,0.25);
+}
+.checklist-event.result-event.result-failed{
+  background: linear-gradient(135deg, rgba(255,77,109,0.05), rgba(124,92,255,0.03));
+  border-color: rgba(255,77,109,0.25);
+}
+.event-source.result{
+  background: linear-gradient(135deg, rgba(34,214,127,0.18), rgba(0,217,255,0.1));
+  border: 1px solid rgba(34,214,127,0.4);
+  color: #6ee8b0;
+}
+
+/* Зелёная кнопка "Проанализировать результат" */
+.btn-take-action.success{
+  background: linear-gradient(135deg, rgba(34,214,127,0.2), rgba(34,214,127,0.08));
+  border-color: rgba(34,214,127,0.5);
+  color: #6ee8b0;
+}
+.btn-take-action.success:hover{
+  background: linear-gradient(135deg, rgba(34,214,127,0.35), rgba(34,214,127,0.18));
+  color: #fff;
+}
+
+/* Зелёная save-кнопка для achieved */
+.btn-save-focus.success{
+  background: linear-gradient(135deg, #22d67f, #10a860);
+  box-shadow: 0 4px 16px rgba(34,214,127,0.3);
+  color: #001a10;
+}
+.btn-save-focus.success:hover{
+  box-shadow: 0 6px 24px rgba(34,214,127,0.5);
+}
