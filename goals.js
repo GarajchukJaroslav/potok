@@ -401,6 +401,9 @@ function answerResultCheck(achieved){
   if(typeof renderKanban === 'function') renderKanban();
   if(typeof renderChecklist === 'function') renderChecklist();
   if(typeof renderAnalysis === 'function') renderAnalysis();
+
+  // проверяем следующий завершённый шаг без ответа
+  setTimeout(checkPendingResultChecks, 500);
 }
 
 /* ---------- РЕНДЕР ---------- */
