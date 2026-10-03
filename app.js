@@ -36,6 +36,7 @@ function goUp(){ goTo(currentIndex - 1); }
 function init(){
   if(typeof generateChecklistEvents === 'function') generateChecklistEvents();
 
+  if(typeof renderStartBlock === 'function') renderStartBlock();
   renderGoalList();
   renderHabits();
   renderKanban();
@@ -95,13 +96,14 @@ function init(){
 
   if(globalTicker) clearInterval(globalTicker);
   globalTicker = setInterval(() => {
+    if(!isStarted()) return;
     if(typeof generateChecklistEvents === 'function') generateChecklistEvents();
     if(typeof checkSystemBlock === 'function') checkSystemBlock();
   }, 15000);
 
-  if(typeof checkSystemBlock === 'function') checkSystemBlock();
+  if(isStarted() && typeof checkSystemBlock === 'function') checkSystemBlock();
 
-  /* ============ PWA: регистрация Service Worker ============ */
+  /* ============ PWA ============ */
   if('serviceWorker' in navigator){
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
