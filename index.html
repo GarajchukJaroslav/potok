@@ -94,7 +94,7 @@
           <div class="side-head">
             <select class="side-select" id="sideSelect" onchange="switchManualType(this.value)">
               <option value="want">Не хочу делать</option>
-              <option value="result">Результат не соответствует</option>
+              <option value="result">Анализ результатов</option>
             </select>
             <button class="manual-add-btn" id="sideAddBtn" onclick="openManualPicker()" title="Добавить">+</button>
           </div>
@@ -200,6 +200,26 @@
     </div>
   </div>
 </div>  
+
+<!-- МОДАЛКА: РЕЗУЛЬТАТ ДОСТИГНУТ? -->
+<div class="manual-overlay" id="resultCheckOverlay">
+  <div class="manual-modal result-check-modal">
+    <div class="manual-modal-head">
+      <div class="manual-modal-title">Результат достигнут?</div>
+    </div>
+    <div class="result-check-body">
+      <div class="result-check-step" id="resultCheckStep"></div>
+      <div class="result-check-expected">
+        <span class="result-check-label">Результат:</span>
+        <span id="resultCheckExpected"></span>
+      </div>
+    </div>
+    <div class="manual-actions">
+      <button class="manual-btn danger" onclick="answerResultCheck(false)">✗ Нет</button>
+      <button class="manual-btn success" onclick="answerResultCheck(true)">✓ Да</button>
+    </div>
+  </div>
+</div>
 
 <!-- БЛОК СИСТЕМЫ -->
 <div class="block-overlay" id="blockOverlay">
