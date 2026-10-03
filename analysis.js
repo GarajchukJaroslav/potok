@@ -74,6 +74,7 @@ function sourceMeta(source, manualType){
   if(source === 'habit')  return { icon:'🎯', label:'ЗОЖ',       cls:'habit' };
   if(source === 'kanban') return { icon:'📋', label:'Канбан',    cls:'kanban' };
   if(source === 'merged') return { icon:'🔗', label:'Объединено', cls:'merged' };
+  if(source === 'result') return { icon:'🎯', label:'Результат', cls:'result' };
   if(source === 'manual' && manualType === 'result')
                           return { icon:'🎯', label:'Результат', cls:'result' };
   if(source === 'manual') return { icon:'💭', label:'Своё',       cls:'manual' };
@@ -244,6 +245,8 @@ function renderAnalysisFocus(e){
   const isMerged = e.source === 'merged';
   const isManualWant = e.source === 'manual' && e.manualType === 'want';
   const isManualResult = e.source === 'manual' && e.manualType === 'result';
+  const isResultEvent = e.source === 'result';
+  const isAchievedResult = isResultEvent && e.achieved;
 
   let headerHtml = '';
 
@@ -264,10 +267,14 @@ function renderAnalysisFocus(e){
   } else {
     const meta = sourceMeta(e.source, e.manualType);
     const crumb = e.crumb ? `<div class="focus-event-crumb">${escapeHtml(e.crumb)}</div>` : '';
+    const achievedBadge = isResultEvent
+      ? (e.achieved ? ' <span class="achieved-badge success">✓ достигнут</span>' : ' <span class="achieved-badge fail">✗ не достигнут</span>')
+      : '';
     headerHtml = `
       <div class="focus-event-meta">
         <span class="event-date">${fmtEventDate(e.date)}</span>
         <span class="event-source ${meta.cls}">${meta.icon} ${meta.label}</span>
+        ${achievedBadge}
       </div>
       <div class="focus-event-title">${escapeHtml(e.title)}</div>
       ${crumb}
@@ -275,14 +282,21 @@ function renderAnalysisFocus(e){
     `;
   }
 
-  const canDelete = isManualWant || (isMerged && isAllManualDeletableMerge(e));
+  const canDelete = !isResultEvent && (isManualWant || (isMerged && isAllManualDeletableMerge(e)));
 
-  const placeholder = isManualResult
-    ? 'Что ты ожидал? Что получилось? Где расхождение?'
-    : 'Почему это произошло? Что общего между этими событиями?';
+  let placeholder;
+  if(isAchievedResult){
+    placeholder = 'Как всё прошло? Что сработало? Что можно закрепить?';
+  } else if(isResultEvent){
+    placeholder = 'Что ты ожидал? Что получилось? Где расхождение?';
+  } else if(isManualResult){
+    placeholder = 'Что ты ожидал? Что получилось? Где расхождение?';
+  } else {
+    placeholder = 'Почему это произошло? Что общего между этими событиями?';
+  }
 
   focusEl.innerHTML = `
-    <div class="focus-panel${isManualResult ? ' focus-panel-result' : ''}">
+    <div class="focus-panel${(isManualResult || isResultEvent) ? ' focus-panel-result' : ''}${isAchievedResult ? ' focus-panel-achieved' : ''}">
       <div class="focus-head">
         <div class="focus-event-info">${headerHtml}</div>
         <div class="focus-timer-wrap">
@@ -298,7 +312,7 @@ function renderAnalysisFocus(e){
         </div>
 
         <div class="focus-field">
-          <label class="focus-label">Действия</label>
+          <label class="focus-label">Действия${isAchievedResult ? ' (необязательно)' : ''}</label>
           <div id="focusActionList" class="focus-action-list"></div>
           <button class="add-action-btn" onclick="openActionPicker()">+ Добавить действие</button>
         </div>
@@ -307,7 +321,9 @@ function renderAnalysisFocus(e){
       <div class="focus-actions">
         <button class="btn-cancel-focus" onclick="minimizeAnalysis()">Свернуть</button>
         ${canDelete ? `<button class="btn-cancel-focus danger" onclick="deleteManualAnalysis()">Удалить без решения</button>` : ''}
-        <button class="btn-save-focus" onclick="saveAnalysis()">Сохранить и закрыть</button>
+        <button class="btn-save-focus${isAchievedResult ? ' success' : ''}" onclick="saveAnalysis()">
+          ${isAchievedResult ? 'Проанализировать результат' : 'Сохранить и закрыть'}
+        </button>
       </div>
     </div>
   `;
@@ -315,7 +331,6 @@ function renderAnalysisFocus(e){
   const timer = document.getElementById('focusTimer');
   if(timer) updateTimerDisplay(timer);
 
-  // Заполняем textarea текстом, если уже писали (не сохраняя — пользователь в праве стереть)
   const noteEl = document.getElementById('focusNote');
   if(noteEl){
     if(e.draftNote) noteEl.value = e.draftNote;
@@ -341,7 +356,10 @@ function renderAnalysisHome(){
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">✨</span>Нет активных событий</div>`
     : active.map(e => {
         const meta = sourceMeta(e.source, e.manualType);
-        const label = e.status === 'in_progress' ? 'Продолжить' : 'Принять меры';
+        const isAchievedResult = e.source === 'result' && e.achieved;
+        const label = e.status === 'in_progress'
+          ? 'Продолжить'
+          : (isAchievedResult ? 'Проанализировать результат' : 'Принять меры');
         const click = e.status === 'in_progress'
           ? `resumeAnalysisFromEvent('${e.id}')`
           : `startAnalysisFromEvent('${e.id}')`;
@@ -357,7 +375,7 @@ function renderAnalysisHome(){
           : escapeHtml(e.detail);
 
         return `
-          <div class="home-event${e.status === 'in_progress' ? ' in-progress' : ''}${e.source === 'manual' && e.manualType === 'result' ? ' is-result' : ''}" data-event-id="${e.id}">
+          <div class="home-event${e.status === 'in_progress' ? ' in-progress' : ''}${isAchievedResult ? ' is-achieved' : ''}${e.source === 'result' && !e.achieved ? ' is-failed' : ''}${e.source === 'manual' && e.manualType === 'result' ? ' is-result' : ''}" data-event-id="${e.id}">
             <div class="home-event-row">
               ${canSelect ? `<div class="merge-checkbox ${checked}" onclick="toggleMergeSelect('${e.id}')"></div>` : ''}
               <span class="home-event-date">${fmtEventDate(e.date)}</span>
@@ -365,7 +383,7 @@ function renderAnalysisHome(){
             </div>
             <div class="home-event-title">${title}</div>
             <div class="home-event-detail">${detail}</div>
-            <button class="btn-take-action small" onclick="${click}">${label}</button>
+            <button class="btn-take-action small${isAchievedResult ? ' success' : ''}" onclick="${click}">${label}</button>
           </div>`;
       }).join('');
 
@@ -445,18 +463,19 @@ function saveAnalysis(){
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
 
-  if(e.analysisDeadline && Date.now() > e.analysisDeadline){
+  const isAchievedResult = e.source === 'result' && e.achieved;
+
+  if(!isAchievedResult && e.analysisDeadline && Date.now() > e.analysisDeadline){
     if(typeof triggerBlock === 'function') triggerBlock('analysis_timeout', [e.id]);
     return;
   }
 
   const draft = e.draftActions || [];
-  if(draft.length === 0){
+  if(draft.length === 0 && !isAchievedResult){
     alert('Добавь хотя бы одно действие');
     return;
   }
 
-  // Описания уже в draft — берём их
   const actionLines = draft.map(a => a.description);
 
   // Выполняем все действия
@@ -468,7 +487,6 @@ function saveAnalysis(){
     }
   }
 
-  // Мысль + правило
   const thought = {
     id: uid(),
     text: note,
@@ -478,9 +496,13 @@ function saveAnalysis(){
   };
   thoughts.unshift(thought);
 
+  const ruleText = actionLines.length > 0
+    ? actionLines.join('\n')
+    : (isAchievedResult ? 'Результат достигнут — без структурных изменений' : 'Без действий');
+
   const rule = {
     id: uid(),
-    text: actionLines.join('\n'),
+    text: ruleText,
     from: thought.id,
     date: new Date().toISOString(),
     actions: draft.map(a => ({ type: a.type, data: a.data }))
@@ -496,7 +518,7 @@ function saveAnalysis(){
   store.set('rules', rules);
   store.set('checklistEvents', checklistEvents);
 
-  resolveEvent(e.id, actionLines.join('\n'));
+  resolveEvent(e.id, ruleText);
 
   activeAnalysisEventId = null;
   stopAnalysisTicker();
@@ -517,9 +539,10 @@ function deleteManualAnalysis(){
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
 
-  const canDelete =
-    (e.source === 'manual' && e.manualType === 'want') ||
-    (e.source === 'merged' && isAllManualDeletableMerge(e));
+  const isResultEvent = e.source === 'result';
+  const canDelete = !isResultEvent &&
+    ((e.source === 'manual' && e.manualType === 'want') ||
+     (e.source === 'merged' && isAllManualDeletableMerge(e)));
 
   if(!canDelete) return;
   if(!confirm('Удалить событие без решения?')) return;
