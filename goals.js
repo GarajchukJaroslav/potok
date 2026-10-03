@@ -339,7 +339,7 @@ function renderGoalList(){
     const stepsHtml = (g.steps || []).map(s => renderStep(g.id, s)).join('');
 
     const addStepHtml = locked
-      ? `<div class="locked-hint">Новые шаги — только через Анализ → Действия</div>`
+      ? ''
       : `<div class="step-add">
            <input name="step-text-${g.id}" data-step-input="${g.id}" placeholder="Новый шаг..." maxlength="200">
            <input name="step-dl-${g.id}" type="date" data-step-deadline="${g.id}" title="Дедлайн (обязательно)">
@@ -434,7 +434,7 @@ function renderStep(goalId, s){
   ].filter(Boolean).join(' ');
 
   const subsAddHtml = locked
-    ? `<div class="locked-hint">Новые подшаги — только через Анализ</div>`
+    ? ''
     : `<div class="substep-add">
          <input name="substep-text-${stepKey}" data-substep-input="${stepKey}" placeholder="Новый подшаг..." maxlength="200">
          <input name="substep-dl-${stepKey}" type="date" data-substep-deadline="${stepKey}" title="Дедлайн (обязательно)">
