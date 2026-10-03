@@ -364,7 +364,7 @@ function renderAnalysisHome(){
           ? `resumeAnalysisFromEvent('${e.id}')`
           : `startAnalysisFromEvent('${e.id}')`;
         const checked = selectedForMerge.has(e.id) ? 'checked' : '';
-        const canSelect = e.status === 'new';
+        const canSelect = e.status === 'new' && e.source !== 'result';
 
         const title = e.source === 'merged'
           ? `${getMergedChildren(e).length} ${plural(getMergedChildren(e).length,'событие','события','событий')}`
