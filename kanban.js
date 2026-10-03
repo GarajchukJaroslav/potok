@@ -109,6 +109,7 @@ function kanbanCard(t, colKey){
 }
 
 function moveTask(goalId, stepId, substepId, direction){
+  if(!canExecute()){ blockedBeforeStart(); return; } 
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   const step = g.steps.find(x => x.id === stepId);
