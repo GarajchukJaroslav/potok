@@ -1,6 +1,5 @@
 /* ==================================================================
    ACTIONS — структурные действия из анализа
-   (добавление/удаление/сдвиг сущностей системы)
 ================================================================== */
 
 /* ---------- ПОИСК ---------- */
@@ -17,7 +16,7 @@ function findSubstep(goalId, stepId, substepId){
 }
 function findHabit(habitId){ return habits.find(h => h.id === habitId) || null; }
 
-/* ---------- ОПЦИИ ДЛЯ СЕЛЕКТОВ ---------- */
+/* ---------- ОПЦИИ ---------- */
 function optionsGoals(){
   let html = '<option value="">— выбери цель —</option>';
   goals.forEach(g => {
@@ -25,7 +24,6 @@ function optionsGoals(){
   });
   return html;
 }
-
 function optionsHabits(){
   let html = '<option value="">— выбери привычку —</option>';
   habits.forEach(h => {
@@ -33,7 +31,6 @@ function optionsHabits(){
   });
   return html;
 }
-
 function optionsSteps(){
   let html = '<option value="">— выбери шаг —</option>';
   goals.forEach(g => {
@@ -47,7 +44,6 @@ function optionsSteps(){
   });
   return html;
 }
-
 function optionsSubsteps(){
   let html = '<option value="">— выбери подшаг —</option>';
   goals.forEach(g => {
@@ -64,55 +60,87 @@ function optionsSubsteps(){
   return html;
 }
 
-function optionsNoteTargets(){
+/* Куда можно добавить заметку, исключая то, куда уже есть заметка в этом анализе */
+function optionsNoteTargets(excludeKeys){
+  excludeKeys = excludeKeys || new Set();
   let html = '<option value="">— куда добавить заметку —</option>';
-  if(habits.length > 0){
-    html += '<optgroup label="Привычки">';
-    habits.forEach(h => {
-      html += `<option value="habit/${h.id}">${escapeHtml(h.name)}</option>`;
-    });
-    html += '</optgroup>';
+
+  // Привычки
+  const habitOpts = [];
+  habits.forEach(h => {
+    const key = 'habit/' + h.id;
+    if(excludeKeys.has(key)) return;
+    habitOpts.push(`<option value="${key}">${escapeHtml(h.name)}</option>`);
+  });
+  if(habitOpts.length > 0){
+    html += '<optgroup label="Привычки">' + habitOpts.join('') + '</optgroup>';
   }
+
+  // Цели → шаги → подшаги
   goals.forEach(g => {
     const steps = g.steps || [];
     if(steps.length === 0) return;
-    html += `<optgroup label="🎯 ${escapeHtml(g.text)}">`;
+    const stepOpts = [];
     steps.forEach(s => {
-      html += `<option value="step/${g.id}/${s.id}">Шаг: ${escapeHtml(s.text)}</option>`;
+      const stepKey = 'step/' + g.id + '/' + s.id;
+      if(!excludeKeys.has(stepKey)){
+        stepOpts.push(`<option value="${stepKey}">Шаг: ${escapeHtml(s.text)}</option>`);
+      }
       (s.substeps || []).forEach(ss => {
-        html += `<option value="substep/${g.id}/${s.id}/${ss.id}">↳ Подшаг: ${escapeHtml(ss.text)}</option>`;
+        const subKey = 'substep/' + g.id + '/' + s.id + '/' + ss.id;
+        if(!excludeKeys.has(subKey)){
+          stepOpts.push(`<option value="${subKey}">↳ Подшаг: ${escapeHtml(ss.text)}</option>`);
+        }
       });
     });
-    html += '</optgroup>';
+    if(stepOpts.length > 0){
+      html += `<optgroup label="🎯 ${escapeHtml(g.text)}">${stepOpts.join('')}</optgroup>`;
+    }
   });
+
   return html;
 }
 
-/* ---------- ПОСТРОЕНИЕ ФОРМЫ ПОД ТИП ---------- */
-function onActionTypeChange(type){
-  const host = document.getElementById('focusActionForm');
-  if(!host) return;
-  if(!type){ host.innerHTML = ''; return; }
+/* Ключи заметок, уже добавленных в текущий черновик */
+function collectDraftNoteKeys(){
+  const set = new Set();
+  const draft = getDraftActions();
+  draft.forEach(a => {
+    if(a.type !== 'note') return;
+    const t = a.data.target;
+    if(t.kind === 'habit') set.add('habit/' + t.habitId);
+    else if(t.kind === 'step') set.add('step/' + t.goalId + '/' + t.stepId);
+    else if(t.kind === 'substep') set.add('substep/' + t.goalId + '/' + t.stepId + '/' + t.substepId);
+  });
+  return set;
+}
 
+/* ---------- ПОСТРОЕНИЕ HTML ФОРМЫ ПОД ТИП ---------- */
+function buildActionFormHTML(type){
   if(type === 'note'){
-    host.innerHTML = `
-      <select class="action-select" id="actTarget">${optionsNoteTargets()}</select>
+    const excluded = collectDraftNoteKeys();
+    const opts = optionsNoteTargets(excluded);
+    return `
+      <select class="action-select" id="actTarget">${opts}</select>
       <textarea class="action-textarea" id="actText" placeholder="Текст заметки"></textarea>
     `;
-  } else if(type === 'add_step'){
-    host.innerHTML = `
+  }
+  if(type === 'add_step'){
+    return `
       <select class="action-select" id="actGoal">${optionsGoals()}</select>
       <input class="action-input" type="text" id="actText" placeholder="Название шага" maxlength="200">
       <input class="action-input" type="date" id="actDeadline" title="Дедлайн">
     `;
-  } else if(type === 'add_substep'){
-    host.innerHTML = `
+  }
+  if(type === 'add_substep'){
+    return `
       <select class="action-select" id="actStep">${optionsSteps()}</select>
       <input class="action-input" type="text" id="actText" placeholder="Название подшага" maxlength="200">
       <input class="action-input" type="date" id="actDeadline">
     `;
-  } else if(type === 'add_habit'){
-    host.innerHTML = `
+  }
+  if(type === 'add_habit'){
+    return `
       <input class="action-input" type="text" id="actText" placeholder="Название привычки" maxlength="80">
       <div class="action-row">
         <input class="action-input small" type="number" id="actTarget" value="1" min="1" max="30">
@@ -122,23 +150,29 @@ function onActionTypeChange(type){
         </select>
       </div>
     `;
-  } else if(type === 'del_step'){
-    host.innerHTML = `<select class="action-select" id="actStep">${optionsSteps()}</select>`;
-  } else if(type === 'del_substep'){
-    host.innerHTML = `<select class="action-select" id="actSubstep">${optionsSubsteps()}</select>`;
-  } else if(type === 'del_habit'){
-    host.innerHTML = `<select class="action-select" id="actHabit">${optionsHabits()}</select>`;
-  } else if(type === 'shift_step_deadline'){
-    host.innerHTML = `
+  }
+  if(type === 'del_step'){
+    return `<select class="action-select" id="actStep">${optionsSteps()}</select>`;
+  }
+  if(type === 'del_substep'){
+    return `<select class="action-select" id="actSubstep">${optionsSubsteps()}</select>`;
+  }
+  if(type === 'del_habit'){
+    return `<select class="action-select" id="actHabit">${optionsHabits()}</select>`;
+  }
+  if(type === 'shift_step_deadline'){
+    return `
       <select class="action-select" id="actStep">${optionsSteps()}</select>
       <input class="action-input" type="date" id="actDeadline" title="Новая дата">
     `;
-  } else if(type === 'shift_substep_deadline'){
-    host.innerHTML = `
+  }
+  if(type === 'shift_substep_deadline'){
+    return `
       <select class="action-select" id="actSubstep">${optionsSubsteps()}</select>
       <input class="action-input" type="date" id="actDeadline" title="Новая дата">
     `;
   }
+  return '';
 }
 
 /* ---------- СБОР ДАННЫХ ИЗ ФОРМЫ ---------- */
@@ -299,7 +333,7 @@ function executeAction(type, data){
   return false;
 }
 
-/* ---------- ОПИСАНИЕ ДЕЙСТВИЯ (для истории) ---------- */
+/* ---------- ОПИСАНИЕ (для истории и для черновика) ---------- */
 function describeAction(type, data){
   if(type === 'note'){
     let targetName = '';
@@ -313,33 +347,125 @@ function describeAction(type, data){
       const ss = findSubstep(data.target.goalId, data.target.stepId, data.target.substepId);
       targetName = 'подшагу «' + (ss ? ss.text : '?') + '»';
     }
-    return `Добавил заметку к ${targetName}: ${data.text}`;
+    return `Заметка к ${targetName}: ${data.text}`;
   }
-  if(type === 'add_step') return `Добавил шаг «${data.text}» (дедлайн ${data.deadline})`;
-  if(type === 'add_substep') return `Добавил подшаг «${data.text}» (дедлайн ${data.deadline})`;
+  if(type === 'add_step') return `Добавить шаг «${data.text}» (дедлайн ${data.deadline})`;
+  if(type === 'add_substep') return `Добавить подшаг «${data.text}» (дедлайн ${data.deadline})`;
   if(type === 'add_habit'){
     const p = data.period === 'day' ? 'день' : 'неделю';
-    return `Добавил привычку «${data.text}» — ${data.target} раз в ${p}`;
+    return `Добавить привычку «${data.text}» — ${data.target} раз в ${p}`;
   }
   if(type === 'del_step'){
     const s = findStep(data.goalId, data.stepId);
-    return `Удалил шаг «${s ? s.text : '?'}»`;
+    return `Удалить шаг «${s ? s.text : '?'}»`;
   }
   if(type === 'del_substep'){
     const ss = findSubstep(data.goalId, data.stepId, data.substepId);
-    return `Удалил подшаг «${ss ? ss.text : '?'}»`;
+    return `Удалить подшаг «${ss ? ss.text : '?'}»`;
   }
   if(type === 'del_habit'){
     const h = findHabit(data.habitId);
-    return `Удалил привычку «${h ? h.name : '?'}»`;
+    return `Удалить привычку «${h ? h.name : '?'}»`;
   }
   if(type === 'shift_step_deadline'){
     const s = findStep(data.goalId, data.stepId);
-    return `Сдвинул дедлайн шага «${s ? s.text : '?'}» на ${data.deadline}`;
+    return `Сдвинуть дедлайн шага «${s ? s.text : '?'}» на ${data.deadline}`;
   }
   if(type === 'shift_substep_deadline'){
     const ss = findSubstep(data.goalId, data.stepId, data.substepId);
-    return `Сдвинул дедлайн подшага «${ss ? ss.text : '?'}» на ${data.deadline}`;
+    return `Сдвинуть дедлайн подшага «${ss ? ss.text : '?'}» на ${data.deadline}`;
   }
   return 'Действие';
+}
+
+/* ==================================================================
+   ЧЕРНОВИК ДЕЙСТВИЙ (внутри активного анализа)
+================================================================== */
+
+function getDraftActions(){
+  const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
+  if(!e) return [];
+  if(!Array.isArray(e.draftActions)) e.draftActions = [];
+  return e.draftActions;
+}
+
+function persistDraftActions(){
+  store.set('checklistEvents', checklistEvents);
+}
+
+function openActionPicker(){
+  const sel = document.getElementById('pickerActionType');
+  if(sel) sel.value = '';
+  const form = document.getElementById('pickerActionForm');
+  if(form) form.innerHTML = '';
+  document.getElementById('actionPickerOverlay').classList.add('open');
+}
+
+function closeActionPicker(){
+  const ov = document.getElementById('actionPickerOverlay');
+  if(ov) ov.classList.remove('open');
+}
+
+function onPickerTypeChange(type){
+  const host = document.getElementById('pickerActionForm');
+  if(!host) return;
+  host.innerHTML = type ? buildActionFormHTML(type) : '';
+}
+
+function confirmAddAction(){
+  const type = document.getElementById('pickerActionType')?.value || '';
+  if(!type){ alert('Выбери тип действия'); return; }
+  const data = collectActionData(type);
+  if(!data) return;
+
+  // защита: заметка на то же самое дважды
+  if(type === 'note'){
+    const key = noteTargetKey(data.target);
+    const existing = collectDraftNoteKeys();
+    if(existing.has(key)){
+      alert('К этой сущности заметка уже добавлена в этом анализе');
+      return;
+    }
+  }
+
+  const description = describeAction(type, data);
+  const draft = getDraftActions();
+  draft.push({ id: uid(), type, data, description });
+  persistDraftActions();
+  closeActionPicker();
+  renderActionList();
+}
+
+function noteTargetKey(t){
+  if(t.kind === 'habit') return 'habit/' + t.habitId;
+  if(t.kind === 'step') return 'step/' + t.goalId + '/' + t.stepId;
+  if(t.kind === 'substep') return 'substep/' + t.goalId + '/' + t.stepId + '/' + t.substepId;
+  return '';
+}
+
+function removeDraftAction(actionId){
+  const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
+  if(!e) return;
+  e.draftActions = (e.draftActions || []).filter(a => a.id !== actionId);
+  persistDraftActions();
+  renderActionList();
+}
+
+function renderActionList(){
+  const host = document.getElementById('focusActionList');
+  if(!host) return;
+  const draft = getDraftActions();
+
+  if(draft.length === 0){
+    host.innerHTML = `<div class="action-empty">Действий пока нет. Нажми «+ Добавить действие».</div>`;
+    return;
+  }
+
+  host.innerHTML = draft.map((a, i) => `
+    <div class="action-card">
+      <div class="action-card-num">${i+1}</div>
+      <div class="action-card-text">${escapeHtml(a.description)}</div>
+      <button class="action-card-del" onclick="removeDraftAction('${a.id}')" title="удалить">✕</button>
+    </div>
+  `).join('');
 }
