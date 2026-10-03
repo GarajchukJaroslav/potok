@@ -169,6 +169,38 @@
   </div>
 </div>
 
+<!-- МОДАЛКА ДОБАВЛЕНИЯ ДЕЙСТВИЯ -->
+<div class="manual-overlay" id="actionPickerOverlay" onclick="if(event.target===this) closeActionPicker()">
+  <div class="manual-modal">
+    <div class="manual-modal-head">
+      <div class="manual-modal-title">Новое действие</div>
+      <button class="modal-close" onclick="closeActionPicker()">✕</button>
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Тип действия</label>
+      <select class="action-select" id="pickerActionType" onchange="onPickerTypeChange(this.value)">
+        <option value="">— выбери тип —</option>
+        <option value="note">📝 Добавить заметку к шагу / привычке</option>
+        <option value="add_step">➕ Добавить шаг к цели</option>
+        <option value="add_substep">➕ Добавить подшаг</option>
+        <option value="add_habit">➕ Добавить привычку</option>
+        <option value="del_step">🗑 Удалить шаг</option>
+        <option value="del_substep">🗑 Удалить подшаг</option>
+        <option value="del_habit">🗑 Удалить привычку</option>
+        <option value="shift_step_deadline">📅 Сдвинуть дедлайн шага</option>
+        <option value="shift_substep_deadline">📅 Сдвинуть дедлайн подшага</option>
+      </select>
+    </div>
+    <div class="manual-field">
+      <div id="pickerActionForm" class="focus-action-form"></div>
+    </div>
+    <div class="manual-actions">
+      <button class="manual-btn" onclick="closeActionPicker()">Отмена</button>
+      <button class="manual-btn accent" onclick="confirmAddAction()">Добавить</button>
+    </div>
+  </div>
+</div>  
+
 <!-- БЛОК СИСТЕМЫ -->
 <div class="block-overlay" id="blockOverlay">
   <div class="block-card" id="blockCard"></div>
