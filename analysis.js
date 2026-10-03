@@ -9,6 +9,8 @@ let selectedForMerge = new Set();
 
 /* ---------- СТАРТ / ПРОДОЛЖЕНИЕ ---------- */
 function startAnalysisFromEvent(eventId){
+  if(!canExecute()){ blockedBeforeStart(); return; }
+   
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e) return;
   if(e.status === 'resolved') return;
@@ -27,6 +29,8 @@ function startAnalysisFromEvent(eventId){
 }
 
 function resumeAnalysisFromEvent(eventId){
+  if(!canExecute()){ blockedBeforeStart(); return; }
+   
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e || e.status !== 'in_progress') return;
   activeAnalysisEventId = eventId;
