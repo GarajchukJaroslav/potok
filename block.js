@@ -6,6 +6,10 @@
 ================================================================== */
 
 function checkSystemBlock(){
+  if(!isStarted()){
+    return;
+  }
+   
   if(systemBlock.active){
     const overlay = document.getElementById('blockOverlay');
     if(overlay && overlay.classList.contains('open')){
