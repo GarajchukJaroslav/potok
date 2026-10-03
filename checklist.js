@@ -1,8 +1,8 @@
 /* ==================================================================
-   ЧЕКЛИСТ — авто-события + свои события (дропдаун) + merged
+   ЧЕКЛИСТ — авто-события + свои «не хочу» + авто-анализ результатов
 ================================================================== */
 
-/* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ ---------- */
+/* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ (привычки + канбан) ---------- */
 function generateChecklistEvents(){
   const before = checklistEvents.length;
 
@@ -115,118 +115,89 @@ function switchManualType(type){
   renderChecklist();
 }
 
-/* ---------- РУЧНЫЕ СОБЫТИЯ ---------- */
+/* ---------- РУЧНЫЕ СОБЫТИЯ («не хочу делать») ---------- */
 function openManualPicker(){
+  if(currentManualType === 'result'){
+    alert('События этого типа создаются автоматически при выполнении шага');
+    return;
+  }
   const type = currentManualType;
 
   const titleEl = document.getElementById('manualModalTitle');
   const labelEl = document.getElementById('manualTaskLabel');
-  if(titleEl) titleEl.textContent = type === 'result'
-    ? 'Результат не соответствует ожиданию'
-    : 'Не хочу делать';
-  if(labelEl) labelEl.textContent = type === 'result'
-    ? 'Какой шаг не дал ожидаемого результата'
-    : 'Что не хочется делать';
+  if(titleEl) titleEl.textContent = 'Не хочу делать';
+  if(labelEl) labelEl.textContent = 'Что не хочется делать';
 
   const tasks = [];
 
-  if(type === 'want'){
-    habits.forEach(h => {
-      tasks.push({
-        value: 'habit:' + h.id,
-        group: 'ЗОЖ',
-        title: h.name,
-        crumb: null,
-        refType: 'habit',
-        refId: h.id,
-        disabled: false
-      });
+  habits.forEach(h => {
+    tasks.push({
+      value: 'habit:' + h.id,
+      group: 'ЗОЖ',
+      title: h.name,
+      crumb: null,
+      refType: 'habit',
+      refId: h.id,
+      disabled: false
     });
+  });
 
-    goals.forEach(g => {
-      if(g.done) return;
-      (g.steps || []).forEach(step => {
-        const subs = step.substeps || [];
-        if(subs.length === 0){
-          if(step.status === 'done') return;
-          tasks.push({
-            value: 'kanban:' + g.id + ':' + step.id,
-            group: 'Канбан',
-            title: step.text,
-            crumb: g.text,
-            refType: 'kanban',
-            refId: step.id,
-            disabled: false
-          });
-        } else {
-          subs.forEach(ss => {
-            if(ss.status === 'done') return;
-            tasks.push({
-              value: 'kanban:' + g.id + ':' + step.id + ':' + ss.id,
-              group: 'Канбан',
-              title: ss.text,
-              crumb: g.text + ' → ' + step.text,
-              refType: 'kanban',
-              refId: step.id + ':' + ss.id,
-              disabled: false
-            });
-          });
-        }
-      });
-    });
-    } else {
-    // result — показываем ВСЕ шаги (и контейнеры, и leaf).
-    // "Выполнен" = stepEffectiveStatus(step) === 'done'.
-    // Подшаги НЕ показываем — только шаги.
-    goals.forEach(g => {
-      (g.steps || []).forEach(step => {
-        const effStatus = stepEffectiveStatus(step);
-        const done = effStatus === 'done';
-        const hasSubs = (step.substeps || []).length > 0;
-
+  goals.forEach(g => {
+    if(g.done) return;
+    (g.steps || []).forEach(step => {
+      const subs = step.substeps || [];
+      if(subs.length === 0){
+        if(step.status === 'done') return;
         tasks.push({
           value: 'kanban:' + g.id + ':' + step.id,
-          group: g.text,
+          group: 'Канбан',
           title: step.text,
-          crumb: hasSubs ? 'шаг с подшагами' : null,
+          crumb: g.text,
           refType: 'kanban',
           refId: step.id,
-          goalId: g.id,
-          stepId: step.id,
-          disabled: !done
+          disabled: false
         });
-      });
+      } else {
+        subs.forEach(ss => {
+          if(ss.status === 'done') return;
+          tasks.push({
+            value: 'kanban:' + g.id + ':' + step.id + ':' + ss.id,
+            group: 'Канбан',
+            title: ss.text,
+            crumb: g.text + ' → ' + step.text,
+            refType: 'kanban',
+            refId: step.id + ':' + ss.id,
+            disabled: false
+          });
+        });
+      }
     });
-  }
+  });
 
   const sel = document.getElementById('manualTaskSelect');
   if(!sel) return;
 
   if(tasks.length === 0){
-    sel.innerHTML = `<option value="">— нет доступных шагов —</option>`;
+    sel.innerHTML = `<option value="">— нет доступных задач —</option>`;
   } else {
     const byGroup = {};
     tasks.forEach(t => {
       if(!byGroup[t.group]) byGroup[t.group] = [];
       byGroup[t.group].push(t);
     });
-    let html = `<option value="">— выбери ${type === 'result' ? 'шаг' : 'задачу'} —</option>`;
+    let html = '<option value="">— выбери задачу —</option>';
     Object.keys(byGroup).forEach(g => {
       html += `<optgroup label="${escapeHtml(g)}">`;
       byGroup[g].forEach(t => {
         const label = t.crumb ? `${t.title}  (${t.crumb})` : t.title;
         const escaped = escapeHtml(label);
         const crumbEsc = t.crumb ? escapeHtml(t.crumb) : '';
-        const dis = t.disabled ? 'disabled' : '';
-        const suffix = t.disabled ? ' — не выполнен' : '';
-        html += `<option value="${t.value}" ${dis}
+        html += `<option value="${t.value}"
           data-ref-type="${t.refType}"
           data-ref-id="${t.refId}"
           data-title="${escapeHtml(t.title)}"
           data-crumb="${crumbEsc}"
-          data-goal-id="${t.goalId || ''}"
-          data-step-id="${t.stepId || ''}"
-        >${escaped}${suffix}</option>`;
+        >${escaped}</option>`;
       });
       html += '</optgroup>';
     });
@@ -253,12 +224,9 @@ function createManualEvent(){
 
   const value = sel.value;
   const date = dateInp.value;
-  const type = currentManualType;
+  const type = 'want';
 
-  if(!value){
-    alert(type === 'result' ? 'Выбери выполненный шаг' : 'Выбери задачу');
-    sel.focus(); return;
-  }
+  if(!value){ alert('Выбери задачу'); sel.focus(); return; }
   if(!date){ alert('Укажи дату'); dateInp.focus(); return; }
   if(date < SYSTEM_START_DATE){ alert('Дата раньше старта системы'); return; }
 
@@ -267,8 +235,6 @@ function createManualEvent(){
   const refId = opt.dataset.refId;
   const title = opt.dataset.title;
   const crumb = opt.dataset.crumb || null;
-  const goalId = opt.dataset.goalId || null;
-  const stepId = opt.dataset.stepId || null;
 
   const dup = checklistEvents.find(e =>
     e.source === 'manual' &&
@@ -288,12 +254,8 @@ function createManualEvent(){
     refType,
     refId,
     title,
-    detail: type === 'result'
-      ? 'результат не соответствует ожиданию'
-      : 'не хочется делать',
+    detail: 'не хочется делать',
     crumb,
-    goalId,
-    stepId,
     createdAt: Date.now(),
     status: 'new',
     analysisId: null,
@@ -318,19 +280,19 @@ function renderChecklist(){
   const select = document.getElementById('sideSelect');
   const addBtn = document.getElementById('sideAddBtn');
 
-  // синхронизируем селект с текущим типом
   if(select && select.value !== currentManualType){
     select.value = currentManualType;
   }
-  // перекрашиваем кнопку + под тему
+
+  const isResultTab = currentManualType === 'result';
   if(addBtn){
-    addBtn.classList.toggle('result', currentManualType === 'result');
+    addBtn.style.display = isResultTab ? 'none' : 'grid';
   }
 
   if(autoList){
     autoList.innerHTML = '';
     const auto = checklistEvents
-      .filter(e => e.status !== 'merged' && e.source !== 'manual')
+      .filter(e => e.status !== 'merged' && e.source !== 'manual' && e.source !== 'result')
       .sort((a,b) => {
         const aDone = a.status === 'resolved' ? 1 : 0;
         const bDone = b.status === 'resolved' ? 1 : 0;
@@ -351,27 +313,38 @@ function renderChecklist(){
 
   if(manualList){
     manualList.innerHTML = '';
-    const items = checklistEvents
-      .filter(e => e.status !== 'merged'
-        && e.source === 'manual'
-        && e.manualType === currentManualType)
-      .sort((a,b) => {
-        const aDone = a.status === 'resolved' ? 1 : 0;
-        const bDone = b.status === 'resolved' ? 1 : 0;
-        if(aDone !== bDone) return aDone - bDone;
-        return b.date.localeCompare(a.date);
-      });
+
+    let items, emptyMsg, emptyIcon;
+
+    if(currentManualType === 'want'){
+      items = checklistEvents.filter(e =>
+        e.status !== 'merged' &&
+        e.source === 'manual' &&
+        e.manualType === 'want'
+      );
+      emptyIcon = '💭';
+      emptyMsg = 'Что-то не хочется делать? Жми +';
+    } else {
+      items = checklistEvents.filter(e =>
+        e.status !== 'merged' && e.source === 'result'
+      );
+      emptyIcon = '🎯';
+      emptyMsg = 'События появятся автоматически, когда завершишь шаг и ответишь на вопрос про результат';
+    }
+
+    items.sort((a,b) => {
+      const aDone = a.status === 'resolved' ? 1 : 0;
+      const bDone = b.status === 'resolved' ? 1 : 0;
+      if(aDone !== bDone) return aDone - bDone;
+      return b.date.localeCompare(a.date);
+    });
 
     if(items.length === 0){
-      const icon = currentManualType === 'result' ? '🎯' : '💭';
-      const hint = currentManualType === 'result'
-        ? 'Результат шага не оправдал ожиданий? Жми +'
-        : 'Что-то не хочется делать? Жми +';
       manualList.innerHTML = `
         <div class="empty" style="padding:30px 20px;">
-          <span class="empty-icon" style="font-size:24px;">${icon}</span>
+          <span class="empty-icon" style="font-size:24px;">${emptyIcon}</span>
           Пусто.<br>
-          <span style="font-size:12px;">${hint}</span>
+          <span style="font-size:12px;">${emptyMsg}</span>
         </div>`;
     } else {
       items.forEach(e => manualList.appendChild(buildEventCard(e)));
@@ -383,7 +356,9 @@ function buildEventCard(e){
   const el = document.createElement('div');
   el.className = 'checklist-event';
   if(e.source === 'manual') el.classList.add('manual');
-  if(e.source === 'manual' && e.manualType === 'result') el.classList.add('manual-result');
+  if(e.source === 'result') el.classList.add('result-event');
+  if(e.source === 'result' && e.achieved) el.classList.add('result-achieved');
+  if(e.source === 'result' && !e.achieved) el.classList.add('result-failed');
   if(e.source === 'merged') el.classList.add('merged');
   if(e.status === 'resolved') el.classList.add('resolved');
   if(e.status === 'in_progress') el.classList.add('in-progress');
@@ -395,9 +370,9 @@ function buildEventCard(e){
     sourceIcon = '🔗';
     const kids = getMergedChildren(e);
     titleHtml = `${kids.length} ${plural(kids.length,'событие','события','событий')}`;
-  } else if(e.source === 'manual' && e.manualType === 'result'){
-    sourceLabel = 'Результат';
-    sourceIcon = '🎯';
+  } else if(e.source === 'result'){
+    sourceLabel = e.achieved ? 'Результат ✓' : 'Результат ✗';
+    sourceIcon = e.achieved ? '✓' : '✗';
     titleHtml = escapeHtml(e.title);
   } else {
     sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё');
@@ -407,7 +382,9 @@ function buildEventCard(e){
 
   let actionHtml = '';
   if(e.status === 'new'){
-    actionHtml = `<button class="btn-take-action" onclick="startAnalysisFromEvent('${e.id}')">Принять меры</button>`;
+    const label = (e.source === 'result' && e.achieved) ? 'Проанализировать результат' : 'Принять меры';
+    const cls = (e.source === 'result' && e.achieved) ? 'btn-take-action success' : 'btn-take-action';
+    actionHtml = `<button class="${cls}" onclick="startAnalysisFromEvent('${e.id}')">${label}</button>`;
   } else if(e.status === 'in_progress'){
     actionHtml = `<button class="btn-take-action in-progress" onclick="resumeAnalysisFromEvent('${e.id}')">Продолжить анализ →</button>`;
   } else {
@@ -423,8 +400,8 @@ function buildEventCard(e){
   if(e.source === 'merged'){
     const kids = getMergedChildren(e);
     childrenHtml = `<div class="event-children">${kids.map(k => {
-      const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : '💭');
-      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'kanban' ? 'Канбан' : 'Своё');
+      const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : (k.source === 'result' ? '✓' : '💭'));
+      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'kanban' ? 'Канбан' : (k.source === 'result' ? 'Результат' : 'Своё'));
       return `<div class="event-child"><span class="event-child-icon">${icon}</span><span class="event-child-label">${label}</span><span class="event-child-title">${escapeHtml(k.title)}</span></div>`;
     }).join('')}</div>`;
   }
