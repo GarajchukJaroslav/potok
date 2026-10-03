@@ -1,6 +1,6 @@
 /* ==================================================================
    ЭКРАН «АНАЛИЗ → ДЕЙСТВИЯ»
-   Событие-фокус, таймер 15 мин, объединение нескольких событий.
+   Событие-фокус, таймер 15 мин, объединение событий, структурные действия.
 ================================================================== */
 
 let activeAnalysisEventId = null;
@@ -10,7 +10,6 @@ let selectedForMerge = new Set();
 /* ---------- СТАРТ / ПРОДОЛЖЕНИЕ ---------- */
 function startAnalysisFromEvent(eventId){
   if(!canExecute()){ blockedBeforeStart(); return; }
-   
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e) return;
   if(e.status === 'resolved') return;
@@ -30,7 +29,6 @@ function startAnalysisFromEvent(eventId){
 
 function resumeAnalysisFromEvent(eventId){
   if(!canExecute()){ blockedBeforeStart(); return; }
-   
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e || e.status !== 'in_progress') return;
   activeAnalysisEventId = eventId;
@@ -71,7 +69,7 @@ function updateTimerDisplay(el){
   else if(left < 5*60000) el.classList.add('warning');
 }
 
-/* ---------- ХЕЛПЕР: ОТКУДА ПРИШЛО СОБЫТИЕ ---------- */
+/* ---------- ХЕЛПЕР ---------- */
 function sourceMeta(source, manualType){
   if(source === 'habit')  return { icon:'🎯', label:'ЗОЖ',       cls:'habit' };
   if(source === 'kanban') return { icon:'📋', label:'Канбан',    cls:'kanban' };
@@ -82,13 +80,11 @@ function sourceMeta(source, manualType){
   return { icon:'•', label:'Событие', cls:'other' };
 }
 
-/* HTML-блок «откуда это пришло» */
 function renderEventOrigin(event){
   if(!event){
     return `<div class="origin-empty">без привязки к событию</div>`;
   }
 
-  // merged
   if(event.source === 'merged'){
     const kids = getMergedChildren(event);
     const kidsHtml = kids.map(k => {
@@ -109,7 +105,6 @@ function renderEventOrigin(event){
     `;
   }
 
-  // обычное событие
   const meta = sourceMeta(event.source, event.manualType);
   const crumbHtml = event.crumb
     ? `<div class="origin-crumb">${escapeHtml(event.crumb)}</div>`
@@ -124,7 +119,6 @@ function renderEventOrigin(event){
   `;
 }
 
-/* Найти событие, к которому относится мысль */
 function findThoughtEvent(t){
   if(!t || !t.fromEvent) return null;
   return checklistEvents.find(x => x.id === t.fromEvent) || null;
@@ -314,10 +308,22 @@ function renderAnalysisFocus(e){
           <label class="focus-label">Анализ проблемы</label>
           <textarea class="focus-textarea" id="focusNote" placeholder="${placeholder}"></textarea>
         </div>
+
         <div class="focus-field">
-          <label class="focus-label">Гипотеза / действие</label>
-          <textarea class="focus-textarea" id="focusAction"
-            placeholder="Что нужно сделать, чтобы это не повторилось?"></textarea>
+          <label class="focus-label">Действие</label>
+          <select class="focus-action-select" id="focusActionSelect" onchange="onActionTypeChange(this.value)">
+            <option value="">— выбери действие —</option>
+            <option value="note">📝 Добавить заметку к шагу / привычке</option>
+            <option value="add_step">➕ Добавить шаг к цели</option>
+            <option value="add_substep">➕ Добавить подшаг</option>
+            <option value="add_habit">➕ Добавить привычку</option>
+            <option value="del_step">🗑 Удалить шаг</option>
+            <option value="del_substep">🗑 Удалить подшаг</option>
+            <option value="del_habit">🗑 Удалить привычку</option>
+            <option value="shift_step_deadline">📅 Сдвинуть дедлайн шага</option>
+            <option value="shift_substep_deadline">📅 Сдвинуть дедлайн подшага</option>
+          </select>
+          <div id="focusActionForm" class="focus-action-form"></div>
         </div>
       </div>
 
@@ -332,11 +338,9 @@ function renderAnalysisFocus(e){
   const timer = document.getElementById('focusTimer');
   if(timer) updateTimerDisplay(timer);
 
-  ['focusNote','focusAction'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.addEventListener('keydown', ev => {
-      if(ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) saveAnalysis();
-    });
+  const noteEl = document.getElementById('focusNote');
+  if(noteEl) noteEl.addEventListener('keydown', ev => {
+    if(ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) saveAnalysis();
   });
 }
 
@@ -378,7 +382,6 @@ function renderAnalysisHome(){
           </div>`;
       }).join('');
 
-  // ---------- История анализа (мысли) ----------
   const thoughtsHtml = thoughts.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">📝</span>Пока пусто</div>`
     : thoughts.map(t => {
@@ -408,7 +411,6 @@ function renderAnalysisHome(){
           </div>`;
       }).join('');
 
-  // ---------- Действия (правила) ----------
   const rulesHtml = rules.length === 0
     ? `<div class="empty" style="padding:20px;"><span class="empty-icon" style="font-size:24px;">⚡</span>Нет действий</div>`
     : rules.map(r => {
@@ -451,14 +453,16 @@ function renderAnalysisHome(){
 /* ---------- СОХРАНЕНИЕ ---------- */
 function saveAnalysis(){
   const noteEl = document.getElementById('focusNote');
-  const actEl = document.getElementById('focusAction');
-  if(!noteEl || !actEl) return;
-
+  if(!noteEl) return;
   const note = noteEl.value.trim();
-  const action = actEl.value.trim();
-
   if(!note){ alert('Напиши анализ проблемы'); noteEl.focus(); return; }
-  if(!action){ alert('Опиши гипотезу / действие'); actEl.focus(); return; }
+
+  const actionSelect = document.getElementById('focusActionSelect');
+  const actionType = actionSelect ? actionSelect.value : '';
+  if(!actionType){ alert('Выбери действие'); if(actionSelect) actionSelect.focus(); return; }
+
+  const actionData = collectActionData(actionType);
+  if(!actionData) return;
 
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
@@ -468,6 +472,14 @@ function saveAnalysis(){
     return;
   }
 
+  // Сначала вытаскиваем описание действия (пока данные не изменились)
+  const actionText = describeAction(actionType, actionData);
+
+  // Выполняем структурное действие
+  const ok = executeAction(actionType, actionData);
+  if(!ok){ alert('Не удалось выполнить действие'); return; }
+
+  // Создаём мысль и правило
   const thought = {
     id: uid(),
     text: note,
@@ -479,9 +491,11 @@ function saveAnalysis(){
 
   const rule = {
     id: uid(),
-    text: action,
+    text: actionText,
     from: thought.id,
-    date: new Date().toISOString()
+    date: new Date().toISOString(),
+    actionType,
+    actionData
   };
   rules.unshift(rule);
   thought.rules.push(rule.id);
@@ -492,7 +506,7 @@ function saveAnalysis(){
   store.set('rules', rules);
   store.set('checklistEvents', checklistEvents);
 
-  resolveEvent(e.id, action);
+  resolveEvent(e.id, actionText);
 
   activeAnalysisEventId = null;
   stopAnalysisTicker();
@@ -500,6 +514,8 @@ function saveAnalysis(){
   renderAnalysis();
   renderChecklist();
   if(typeof renderKanban === 'function') renderKanban();
+  if(typeof renderGoalList === 'function') renderGoalList();
+  if(typeof renderHabits === 'function') renderHabits();
 }
 
 function minimizeAnalysis(){
