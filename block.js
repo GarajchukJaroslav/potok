@@ -1,20 +1,16 @@
 /* ==================================================================
-   БЛОК СИСТЕМЫ — 3 причины блокировки:
-   1) 24ч без реакции на событие
-   2) Просрочен таймер анализа
+   БЛОК СИСТЕМЫ — 3 причины:
+   1) 24ч без реакции на событие (кроме achieved result)
+   2) Просрочен таймер анализа (кроме achieved result)
    3) Одна сущность провалена ≥3 раз за текущий месяц
 ================================================================== */
 
 function checkSystemBlock(){
-  if(!isStarted()){
-    return;
-  }
-   
+  if(!isStarted()) return;
+
   if(systemBlock.active){
     const overlay = document.getElementById('blockOverlay');
-    if(overlay && overlay.classList.contains('open')){
-      return;
-    }
+    if(overlay && overlay.classList.contains('open')) return;
     renderSystemBlock();
     return;
   }
@@ -26,7 +22,9 @@ function checkSystemBlock(){
 
   // 1) 24ч без реакции
   for(const e of active){
-    if(e.status === 'new' && (now - e.createdAt) > EVENT_TIMEOUT_MS){
+    if(e.status !== 'new') continue;
+    if(e.source === 'result' && e.achieved) continue;
+    if((now - e.createdAt) > EVENT_TIMEOUT_MS){
       triggerBlock('timeout_24h', [e.id]);
       return;
     }
@@ -34,7 +32,9 @@ function checkSystemBlock(){
 
   // 2) Просрочен таймер анализа
   for(const e of active){
-    if(e.status === 'in_progress' && e.analysisDeadline && now > e.analysisDeadline){
+    if(e.status !== 'in_progress') continue;
+    if(e.source === 'result' && e.achieved) continue;
+    if(e.analysisDeadline && now > e.analysisDeadline){
       triggerBlock('analysis_timeout', [e.id]);
       return;
     }
@@ -54,11 +54,9 @@ function checkSystemBlock(){
         count: first.events.length
       }
     );
-    return;
   }
 }
 
-/* ---------- ПОИСК ПОВТОРНЫХ ПРОВАЛОВ ---------- */
 function findRepeatFails(){
   const acknowledged = store.get('repeatBlocksAcknowledged', []);
   const now = new Date();
@@ -94,7 +92,6 @@ function findRepeatFails(){
   });
 }
 
-/* ---------- ТРИГГЕР БЛОКА ---------- */
 function triggerBlock(reason, eventIds, meta){
   systemBlock.active = true;
   systemBlock.reason = reason;
@@ -106,7 +103,6 @@ function triggerBlock(reason, eventIds, meta){
   renderSystemBlock(true);
 }
 
-/* ---------- РЕНДЕР БЛОКА ---------- */
 function renderSystemBlock(force){
   const overlay = document.getElementById('blockOverlay');
   if(!overlay) return;
@@ -144,7 +140,6 @@ function renderSystemBlock(force){
     reasonMessage = 'Система заблокирована. Обсуди проблемы с внешним человеком — тренером, другом, наставником — и зафиксируй решения.';
   }
 
-  // ---------- Список проблем ----------
   function eventBlockHtml(e){
     let src, title, detailHtml, childrenHtml = '';
 
@@ -154,10 +149,10 @@ function renderSystemBlock(force){
       title = `${kids.length} ${plural(kids.length,'событие','события','событий')}`;
       detailHtml = '';
       childrenHtml = `<div class="block-event-children">${kids.map(k => {
-        const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : '💭');
+        const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : (k.source === 'result' ? '✓' : '💭'));
         const label = k.source === 'habit' ? 'ЗОЖ'
                     : (k.source === 'kanban' ? 'Канбан'
-                    : (k.manualType === 'result' ? 'Результат' : 'Своё'));
+                    : (k.source === 'result' ? 'Результат' : 'Своё'));
         return `<div class="block-event-child"><span>${icon}</span><span class="block-event-child-label">${label}</span><span class="block-event-child-title">${escapeHtml(k.title)}</span></div>`;
       }).join('')}</div>`;
     } else if(e.source === 'habit'){
@@ -166,6 +161,10 @@ function renderSystemBlock(force){
       detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
     } else if(e.source === 'kanban'){
       src = '📋 Канбан';
+      title = e.title;
+      detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
+    } else if(e.source === 'result'){
+      src = e.achieved ? '✓ Результат' : '✗ Результат';
       title = e.title;
       detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
     } else if(e.source === 'manual'){
@@ -192,9 +191,6 @@ function renderSystemBlock(force){
 
   const eventsListHtml = blockedEvents.map(eventBlockHtml).join('');
 
-  // ---------- Форма решений ----------
-  // Для repeat_fail — одна форма на всю группу (это одна проблема, а не три)
-  // Для остальных — по одной форме на каждое событие
   let solutionsFormHtml;
 
   if(systemBlock.reason === 'repeat_fail' && systemBlock.meta){
@@ -245,7 +241,6 @@ function renderSystemBlock(force){
   `;
 }
 
-/* ---------- ПОДТВЕРЖДЕНИЕ ---------- */
 function confirmBlockResolution(){
   const who = document.getElementById('blockDiscussedWith');
   const whoVal = who ? who.value.trim() : '';
@@ -259,7 +254,6 @@ function confirmBlockResolution(){
   const isRepeat = systemBlock.reason === 'repeat_fail' && systemBlock.meta;
 
   if(isRepeat){
-    // Одно решение на всю группу — разрезолвить все события одним текстом
     const ta = document.querySelector('.block-solution-input[data-solution-for-all]');
     const text = ta ? ta.value.trim() : '';
     if(!text){
@@ -272,7 +266,6 @@ function confirmBlockResolution(){
       if(typeof resolveEvent === 'function') resolveEvent(id, text);
     });
 
-    // Запоминаем, что паттерн за этот месяц разобран
     const d = new Date();
     const ym = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     const m = systemBlock.meta;
@@ -283,7 +276,6 @@ function confirmBlockResolution(){
       store.set('repeatBlocksAcknowledged', acknowledged);
     }
   } else {
-    // По одной форме на событие
     const inputs = document.querySelectorAll('.block-solution-input[data-solution-for]');
     const solutions = [];
     for(const inp of inputs){
