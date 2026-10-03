@@ -1,21 +1,21 @@
 /* ==================================================================
    SERVICE WORKER — офлайн-кэш + заготовка под push
 ================================================================== */
-
-const CACHE_NAME = 'potok-v4';
+const CACHE_NAME = 'potok-v4.3';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './manifest.json',
-  './js/core.js',
-  './js/goals.js',
-  './js/routine.js',
-  './js/kanban.js',
-  './js/checklist.js',
-  './js/block.js',
-  './js/analysis.js',
-  './js/app.js'
+  './core.js',
+  './goals.js',
+  './routine.js',
+  './kanban.js',
+  './checklist.js',
+  './block.js',
+  './actions.js',
+  './analysis.js',
+  './app.js'
 ];
 
 self.addEventListener('install', e => {
