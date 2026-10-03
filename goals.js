@@ -1,12 +1,61 @@
 /* ==================================================================
-   ЭКРАН «ЦЕЛИ» — цель → шаг → подшаг
+   ЭКРАН «ЦЕЛИ» — цель → шаг → подшаг + режим СТАРТ
 ================================================================== */
 
 let expandedGoals = new Set(store.get('expandedGoals', []));
 let expandedSteps = new Set(store.get('expandedSteps', []));
 
+/* ---------- СТАРТ СИСТЕМЫ ---------- */
+function startPotok(){
+  if(goals.length === 0 && habits.length === 0){
+    alert('Создай хотя бы одну цель или привычку, прежде чем стартовать');
+    return;
+  }
+  if(!confirm('Точно стартовать?\n\nПосле старта нельзя будет:\n— создавать новые цели/шаги/подшаги/привычки\n— менять дедлайны\n— удалять что-либо\n\nВсё это — только через Анализ → Действия.')){
+    return;
+  }
+  potokStarted = true;
+  store.set('potokStarted', true);
+  renderStartBlock();
+  renderGoalList();
+  renderHabits();
+  renderKanban();
+  if(typeof renderChecklist === 'function') renderChecklist();
+  if(typeof renderAnalysis === 'function') renderAnalysis();
+}
+
+function renderStartBlock(){
+  const el = document.getElementById('startBlock');
+  if(!el) return;
+
+  if(isStarted()){
+    el.innerHTML = `
+      <div class="start-status">
+        <span class="dot"></span>
+        СИСТЕМА ЗАПУЩЕНА · выполнение активно
+      </div>
+    `;
+  } else {
+    el.innerHTML = `
+      <button class="start-btn" onclick="startPotok()">
+        <span class="start-icon">▶</span>
+        СТАРТ
+      </button>
+      <div class="start-hint">
+        Спланируй цели, шаги и привычки, выставь дедлайны.<br>
+        После СТАРТА план замораживается — можно только выполнять.
+      </div>
+    `;
+  }
+
+  // Скрываем инпут «новая цель» и date-input после старта
+  const bar = document.getElementById('goalsBar');
+  if(bar) bar.style.display = isStarted() ? 'none' : 'flex';
+}
+
 /* ---------- ЦЕЛЬ ---------- */
 function addGoal(){
+  if(!canPlan()){ blockedAfterStart(); return; }
   const inp = document.getElementById('goalInput');
   const dlInp = document.getElementById('goalDeadline');
   const v = inp.value.trim();
@@ -34,6 +83,7 @@ function addGoal(){
 }
 
 function toggleGoalDone(id){
+  if(!canExecute()){ blockedBeforeStart(); return; }
   const g = goals.find(x => x.id === id);
   if(!g) return;
   g.done = !g.done;
@@ -43,6 +93,7 @@ function toggleGoalDone(id){
 }
 
 function delGoal(id){
+  if(!canPlan()){ blockedAfterStart(); return; }
   if(!confirm('Удалить цель со всеми шагами и подшагами?')) return;
   goals = goals.filter(x => x.id !== id);
   store.set('goals', goals);
@@ -51,6 +102,7 @@ function delGoal(id){
 }
 
 function setGoalDeadline(goalId, value){
+  if(!canPlan()){ renderGoalList(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   if(!value){ renderGoalList(); return; }
@@ -65,14 +117,17 @@ function toggleExpandGoal(id){
   else expandedGoals.add(id);
   store.set('expandedGoals', [...expandedGoals]);
   renderGoalList();
-  setTimeout(() => {
-    const inp = document.querySelector(`[data-step-input="${id}"]`);
-    if(inp && expandedGoals.has(id)) inp.focus();
-  }, 30);
+  if(canPlan()){
+    setTimeout(() => {
+      const inp = document.querySelector(`[data-step-input="${id}"]`);
+      if(inp && expandedGoals.has(id)) inp.focus();
+    }, 30);
+  }
 }
 
 /* ---------- ШАГ ---------- */
 function addStep(goalId){
+  if(!canPlan()){ blockedAfterStart(); return; }
   const inp = document.querySelector(`[data-step-input="${goalId}"]`);
   const dlInp = document.querySelector(`[data-step-deadline="${goalId}"]`);
   if(!inp) return;
@@ -107,11 +162,12 @@ function addStep(goalId){
 }
 
 function toggleStep(goalId, stepId){
+  if(!canExecute()){ blockedBeforeStart(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   const s = g.steps.find(x => x.id === stepId);
   if(!s) return;
-  if(s.substeps && s.substeps.length > 0) return; // контейнер — не кликается
+  if(s.substeps && s.substeps.length > 0) return;
   if(s.status === 'done'){
     s.status = s.lastStatus || 'todo';
   } else {
@@ -124,10 +180,10 @@ function toggleStep(goalId, stepId){
 }
 
 function delStep(goalId, stepId){
+  if(!canPlan()){ blockedAfterStart(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   g.steps = g.steps.filter(x => x.id !== stepId);
-  // почистим expandedSteps
   const key = goalId + ':' + stepId;
   if(expandedSteps.has(key)){ expandedSteps.delete(key); store.set('expandedSteps', [...expandedSteps]); }
   store.set('goals', goals);
@@ -136,6 +192,7 @@ function delStep(goalId, stepId){
 }
 
 function setStepDeadline(goalId, stepId, value){
+  if(!canPlan()){ renderGoalList(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   const s = g.steps.find(x => x.id === stepId);
@@ -147,22 +204,23 @@ function setStepDeadline(goalId, stepId, value){
   if(typeof renderKanban === 'function') renderKanban();
 }
 
-/* Открыть/закрыть блок подшагов. Работает и для leaf-шага (для добавления первого),
-   и для контейнера (для сворачивания). */
 function toggleExpandStep(goalId, stepId){
   const key = goalId + ':' + stepId;
   if(expandedSteps.has(key)) expandedSteps.delete(key);
   else expandedSteps.add(key);
   store.set('expandedSteps', [...expandedSteps]);
   renderGoalList();
-  setTimeout(() => {
-    const inp = document.querySelector(`[data-substep-input="${key}"]`);
-    if(inp && expandedSteps.has(key)) inp.focus();
-  }, 30);
+  if(canPlan()){
+    setTimeout(() => {
+      const inp = document.querySelector(`[data-substep-input="${key}"]`);
+      if(inp && expandedSteps.has(key)) inp.focus();
+    }, 30);
+  }
 }
 
 /* ---------- ПОДШАГ ---------- */
 function addSubstep(goalId, stepId){
+  if(!canPlan()){ blockedAfterStart(); return; }
   const key = goalId + ':' + stepId;
   const inp = document.querySelector(`[data-substep-input="${key}"]`);
   const dlInp = document.querySelector(`[data-substep-deadline="${key}"]`);
@@ -199,6 +257,7 @@ function addSubstep(goalId, stepId){
 }
 
 function toggleSubstep(goalId, stepId, substepId){
+  if(!canExecute()){ blockedBeforeStart(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   const s = g.steps.find(x => x.id === stepId);
@@ -217,6 +276,7 @@ function toggleSubstep(goalId, stepId, substepId){
 }
 
 function delSubstep(goalId, stepId, substepId){
+  if(!canPlan()){ blockedAfterStart(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   const s = g.steps.find(x => x.id === stepId);
@@ -228,6 +288,7 @@ function delSubstep(goalId, stepId, substepId){
 }
 
 function setSubstepDeadline(goalId, stepId, substepId, value){
+  if(!canPlan()){ renderGoalList(); return; }
   const g = goals.find(x => x.id === goalId);
   if(!g) return;
   const s = g.steps.find(x => x.id === stepId);
@@ -247,8 +308,10 @@ function renderGoalList(){
   if(!list) return;
   list.innerHTML = '';
 
+  const locked = isStarted();
+
   if(goals.length === 0){
-    list.innerHTML = `<div class="empty"><span class="empty-icon">🎯</span>Пока пусто.<br>Добавь первую глобальную цель.</div>`;
+    list.innerHTML = `<div class="empty"><span class="empty-icon">🎯</span>Пока пусто.<br>Добавь первую цель — и нажми СТАРТ, когда спланируешь.</div>`;
     return;
   }
 
@@ -276,17 +339,25 @@ function renderGoalList(){
 
     const stepsHtml = (g.steps || []).map(s => renderStep(g.id, s)).join('');
 
+    const addStepHtml = locked
+      ? `<div class="locked-hint">Новые шаги — только через Анализ → Действия</div>`
+      : `<div class="step-add">
+           <input name="step-text-${g.id}" data-step-input="${g.id}" placeholder="Новый шаг..." maxlength="200">
+           <input name="step-dl-${g.id}" type="date" data-step-deadline="${g.id}" title="Дедлайн (обязательно)">
+           <button onclick="event.stopPropagation(); addStep('${g.id}')">+</button>
+         </div>`;
+
     const bodyHtml = expandedGoals.has(g.id) ? `
       <div class="goal-body">
         <div class="goal-body-inner">
           ${stepsHtml}
-          <div class="step-add">
-            <input name="step-text-${g.id}" data-step-input="${g.id}" placeholder="Новый шаг..." maxlength="200">
-            <input name="step-dl-${g.id}" type="date" data-step-deadline="${g.id}" title="Дедлайн (обязательно)">
-            <button onclick="event.stopPropagation(); addStep('${g.id}')">+</button>
-          </div>
+          ${addStepHtml}
         </div>
       </div>` : '';
+
+    const delBtn = locked
+      ? ''
+      : `<button class="goal-del" onclick="event.stopPropagation(); delGoal('${g.id}')" title="удалить">✕</button>`;
 
     el.innerHTML = `
       <div class="goal-head">
@@ -296,30 +367,31 @@ function renderGoalList(){
           <div class="goal-meta">${progressPill}${deadlineHtml}</div>
         </div>
         <button class="goal-expand${expandedGoals.has(g.id) ? ' open' : ''}" onclick="event.stopPropagation(); toggleExpandGoal('${g.id}')" title="развернуть">▼</button>
-        <button class="goal-del" onclick="event.stopPropagation(); delGoal('${g.id}')" title="удалить">✕</button>
+        ${delBtn}
       </div>
       ${bodyHtml}`;
     list.appendChild(el);
   });
 
-  // Enter на инпутах шагов
-  document.querySelectorAll('[data-step-input]').forEach(inp => {
-    inp.addEventListener('keydown', e => {
-      if(e.key === 'Enter'){ addStep(inp.dataset.stepInput); }
+  if(!locked){
+    document.querySelectorAll('[data-step-input]').forEach(inp => {
+      inp.addEventListener('keydown', e => {
+        if(e.key === 'Enter'){ addStep(inp.dataset.stepInput); }
+      });
     });
-  });
-  // Enter на инпутах подшагов
-  document.querySelectorAll('[data-substep-input]').forEach(inp => {
-    inp.addEventListener('keydown', e => {
-      if(e.key === 'Enter'){
-        const parts = inp.dataset.substepInput.split(':');
-        addSubstep(parts[0], parts[1]);
-      }
+    document.querySelectorAll('[data-substep-input]').forEach(inp => {
+      inp.addEventListener('keydown', e => {
+        if(e.key === 'Enter'){
+          const parts = inp.dataset.substepInput.split(':');
+          addSubstep(parts[0], parts[1]);
+        }
+      });
     });
-  });
+  }
 }
 
 function renderStep(goalId, s){
+  const locked = isStarted();
   const subs = s.substeps || [];
   const hasSubs = subs.length > 0;
   const effStatus = stepEffectiveStatus(s);
@@ -327,9 +399,11 @@ function renderStep(goalId, s){
   const isOpen = expandedSteps.has(stepKey);
 
   const dlValue = s.deadline || '';
-  const dateInput = `<input name="step-date-${s.id}" type="date" class="step-date" value="${dlValue}"
-    onclick="event.stopPropagation()"
-    onchange="setStepDeadline('${goalId}','${s.id}', this.value)">`;
+  const dateEl = locked
+    ? `<span class="step-date-static">${dlValue ? deadlineInfo(dlValue).text : '—'}</span>`
+    : `<input name="step-date-${s.id}" type="date" class="step-date" value="${dlValue}"
+        onclick="event.stopPropagation()"
+        onchange="setStepDeadline('${goalId}','${s.id}', this.value)">`;
 
   const subsHtml = subs.map(ss => renderSubstep(goalId, s.id, ss)).join('');
   const closedCount = subs.filter(x => x.status === 'done').length;
@@ -342,7 +416,13 @@ function renderStep(goalId, s){
 
   const toggleBtn = hasSubs
     ? `<button class="step-expand${isOpen ? ' open' : ''}" onclick="event.stopPropagation(); toggleExpandStep('${goalId}','${s.id}')" title="подшаги">▼</button>`
-    : `<button class="step-add-sub${isOpen ? ' open' : ''}" onclick="event.stopPropagation(); toggleExpandStep('${goalId}','${s.id}')" title="Добавить подшаги">+↳</button>`;
+    : (locked
+        ? ''
+        : `<button class="step-add-sub${isOpen ? ' open' : ''}" onclick="event.stopPropagation(); toggleExpandStep('${goalId}','${s.id}')" title="Добавить подшаги">+↳</button>`);
+
+  const delBtn = locked
+    ? ''
+    : `<button class="step-del" onclick="event.stopPropagation(); delStep('${goalId}','${s.id}')" title="удалить">✕</button>`;
 
   const stepClass = [
     'step',
@@ -351,14 +431,18 @@ function renderStep(goalId, s){
     (hasSubs && effStatus === 'done') ? 'done' : ''
   ].filter(Boolean).join(' ');
 
+  const subsAddHtml = locked
+    ? `<div class="locked-hint">Новые подшаги — только через Анализ</div>`
+    : `<div class="substep-add">
+         <input name="substep-text-${stepKey}" data-substep-input="${stepKey}" placeholder="Новый подшаг..." maxlength="200">
+         <input name="substep-dl-${stepKey}" type="date" data-substep-deadline="${stepKey}" title="Дедлайн (обязательно)">
+         <button onclick="event.stopPropagation(); addSubstep('${goalId}','${s.id}')">+</button>
+       </div>`;
+
   const subsBlock = isOpen ? `
     <div class="substeps-wrap open">
       ${subsHtml}
-      <div class="substep-add">
-        <input name="substep-text-${stepKey}" data-substep-input="${stepKey}" placeholder="Новый подшаг..." maxlength="200">
-        <input name="substep-dl-${stepKey}" type="date" data-substep-deadline="${stepKey}" title="Дедлайн (обязательно)">
-        <button onclick="event.stopPropagation(); addSubstep('${goalId}','${s.id}')">+</button>
-      </div>
+      ${subsAddHtml}
     </div>` : '';
 
   return `
@@ -366,23 +450,31 @@ function renderStep(goalId, s){
       ${checkEl}
       <div class="step-text">${escapeHtml(s.text)}</div>
       ${countEl}
-      ${dateInput}
+      ${dateEl}
       ${toggleBtn}
-      <button class="step-del" onclick="event.stopPropagation(); delStep('${goalId}','${s.id}')" title="удалить">✕</button>
+      ${delBtn}
     </div>
     ${subsBlock}`;
 }
 
 function renderSubstep(goalId, stepId, ss){
+  const locked = isStarted();
   const done = ss.status === 'done';
   const dlValue = ss.deadline || '';
+  const dateEl = locked
+    ? `<span class="substep-date-static">${dlValue ? deadlineInfo(dlValue).text : '—'}</span>`
+    : `<input name="substep-date-${ss.id}" type="date" class="substep-date" value="${dlValue}"
+        onclick="event.stopPropagation()"
+        onchange="setSubstepDeadline('${goalId}','${stepId}','${ss.id}', this.value)">`;
+  const delBtn = locked
+    ? ''
+    : `<button class="substep-del" onclick="event.stopPropagation(); delSubstep('${goalId}','${stepId}','${ss.id}')" title="удалить">✕</button>`;
+
   return `
     <div class="substep${done ? ' done' : ''}">
       <button class="substep-check${done ? ' done' : ''}" onclick="event.stopPropagation(); toggleSubstep('${goalId}','${stepId}','${ss.id}')"></button>
       <div class="substep-text">${escapeHtml(ss.text)}</div>
-      <input name="substep-date-${ss.id}" type="date" class="substep-date" value="${dlValue}"
-        onclick="event.stopPropagation()"
-        onchange="setSubstepDeadline('${goalId}','${stepId}','${ss.id}', this.value)">
-      <button class="substep-del" onclick="event.stopPropagation(); delSubstep('${goalId}','${stepId}','${ss.id}')" title="удалить">✕</button>
+      ${dateEl}
+      ${delBtn}
     </div>`;
 }
