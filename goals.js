@@ -48,7 +48,6 @@ function renderStartBlock(){
     `;
   }
 
-  // Скрываем инпут «новая цель» и date-input после старта
   const bar = document.getElementById('goalsBar');
   if(bar) bar.style.display = isStarted() ? 'none' : 'flex';
 }
@@ -399,8 +398,11 @@ function renderStep(goalId, s){
   const isOpen = expandedSteps.has(stepKey);
 
   const dlValue = s.deadline || '';
+  const dlInfo = deadlineInfo(dlValue);
+  const dlText = dlInfo ? dlInfo.text : '—';
+
   const dateEl = locked
-    ? `<span class="step-date-static">${dlValue ? deadlineInfo(dlValue).text : '—'}</span>`
+    ? `<span class="step-date-static">${dlText}</span>`
     : `<input name="step-date-${s.id}" type="date" class="step-date" value="${dlValue}"
         onclick="event.stopPropagation()"
         onchange="setStepDeadline('${goalId}','${s.id}', this.value)">`;
@@ -461,11 +463,15 @@ function renderSubstep(goalId, stepId, ss){
   const locked = isStarted();
   const done = ss.status === 'done';
   const dlValue = ss.deadline || '';
+  const dlInfo = deadlineInfo(dlValue);
+  const dlText = dlInfo ? dlInfo.text : '—';
+
   const dateEl = locked
-    ? `<span class="substep-date-static">${dlValue ? deadlineInfo(dlValue).text : '—'}</span>`
+    ? `<span class="substep-date-static">${dlText}</span>`
     : `<input name="substep-date-${ss.id}" type="date" class="substep-date" value="${dlValue}"
         onclick="event.stopPropagation()"
         onchange="setSubstepDeadline('${goalId}','${stepId}','${ss.id}', this.value)">`;
+
   const delBtn = locked
     ? ''
     : `<button class="substep-del" onclick="event.stopPropagation(); delSubstep('${goalId}','${stepId}','${ss.id}')" title="удалить">✕</button>`;
