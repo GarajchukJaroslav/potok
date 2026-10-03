@@ -10,7 +10,7 @@ const store = {
   set(k, v){ localStorage.setItem(k, JSON.stringify(v)); }
 };
 
-const SYSTEM_START_DATE = '2026-09-30';
+const SYSTEM_START_DATE = '2026-10-04';
 
 function dayStr(d){
   const y = d.getFullYear();
