@@ -102,6 +102,19 @@ let goals   = store.get('goals', []);
 let checklistEvents = store.get('checklistEvents', []);
 let systemBlock = store.get('systemBlock', { active:false, reason:null, blockedAt:null, events:[], resolution:null });
 let currentManualType = store.get('manualCurrentType', 'want');
+let potokStarted = store.get('potokStarted', false);
+
+/* ---------- ХЕЛПЕРЫ РЕЖИМА ---------- */
+function isStarted(){ return potokStarted === true; }
+function canPlan(){ return !potokStarted; }
+function canExecute(){ return potokStarted; }
+
+function blockedBeforeStart(){
+  alert('Нажми СТАРТ, чтобы начать выполнять. Пока система не запущена — можно только планировать.');
+}
+function blockedAfterStart(){
+  alert('Система запущена. Изменения в план — только через Анализ → Действия.');
+}
 
 /* ============ МИГРАЦИЯ ============ */
 habits.forEach(h => {
