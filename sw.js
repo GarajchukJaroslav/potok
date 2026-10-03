@@ -2,7 +2,7 @@
    SERVICE WORKER — офлайн-кэш + заготовка под push
 ================================================================== */
 
-const CACHE_NAME = 'potok-v3';
+const CACHE_NAME = 'potok-v4';
 const ASSETS = [
   './',
   './index.html',
