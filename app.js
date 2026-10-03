@@ -99,6 +99,10 @@ function init(){
     if(!isStarted()) return;
     if(typeof generateChecklistEvents === 'function') generateChecklistEvents();
     if(typeof checkSystemBlock === 'function') checkSystemBlock();
+
+    if(typeof checkPendingResultChecks === 'function'){
+       setTimeout(checkPendingResultChecks, 1000);
+    } 
   }, 15000);
 
   if(isStarted() && typeof checkSystemBlock === 'function') checkSystemBlock();
