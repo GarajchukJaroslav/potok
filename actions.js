@@ -65,7 +65,6 @@ function optionsNoteTargets(excludeKeys){
   excludeKeys = excludeKeys || new Set();
   let html = '<option value="">— куда добавить заметку —</option>';
 
-  // Привычки
   const habitOpts = [];
   habits.forEach(h => {
     const key = 'habit/' + h.id;
@@ -76,7 +75,6 @@ function optionsNoteTargets(excludeKeys){
     html += '<optgroup label="Привычки">' + habitOpts.join('') + '</optgroup>';
   }
 
-  // Цели → шаги → подшаги
   goals.forEach(g => {
     const steps = g.steps || [];
     if(steps.length === 0) return;
@@ -101,7 +99,6 @@ function optionsNoteTargets(excludeKeys){
   return html;
 }
 
-/* Ключи заметок, уже добавленных в текущий черновик */
 function collectDraftNoteKeys(){
   const set = new Set();
   const draft = getDraftActions();
@@ -115,7 +112,7 @@ function collectDraftNoteKeys(){
   return set;
 }
 
-/* ---------- ПОСТРОЕНИЕ HTML ФОРМЫ ПОД ТИП ---------- */
+/* ---------- ПОСТРОЕНИЕ ФОРМЫ ПОД ТИП ---------- */
 function buildActionFormHTML(type){
   if(type === 'note'){
     const excluded = collectDraftNoteKeys();
@@ -129,6 +126,7 @@ function buildActionFormHTML(type){
     return `
       <select class="action-select" id="actGoal">${optionsGoals()}</select>
       <input class="action-input" type="text" id="actText" placeholder="Название шага" maxlength="200">
+      <input class="action-input" type="text" id="actResult" placeholder="Результат (что должно получиться)" maxlength="200">
       <input class="action-input" type="date" id="actDeadline" title="Дедлайн">
     `;
   }
@@ -197,11 +195,13 @@ function collectActionData(type){
   } else if(type === 'add_step'){
     const goalId = document.getElementById('actGoal')?.value || '';
     const text = document.getElementById('actText')?.value.trim() || '';
+    const result = document.getElementById('actResult')?.value.trim() || '';
     const deadline = document.getElementById('actDeadline')?.value || '';
     if(!goalId){ alert('Выбери цель'); return null; }
     if(!text){ alert('Напиши название шага'); return null; }
+    if(!result){ alert('Укажи результат шага'); return null; }
     if(!deadline){ alert('Укажи дедлайн'); return null; }
-    data.goalId = goalId; data.text = text; data.deadline = deadline;
+    data.goalId = goalId; data.text = text; data.result = result; data.deadline = deadline;
   } else if(type === 'add_substep'){
     const val = document.getElementById('actStep')?.value || '';
     const text = document.getElementById('actText')?.value.trim() || '';
@@ -272,7 +272,12 @@ function executeAction(type, data){
     if(!g) return false;
     if(!Array.isArray(g.steps)) g.steps = [];
     g.steps.push({
-      id: uid(), text: data.text, status: 'todo', lastStatus: 'todo',
+      id: uid(), text: data.text,
+      result: data.result,
+      resultChecked: false,
+      resultAchieved: null,
+      resultEventId: null,
+      status: 'todo', lastStatus: 'todo',
       deadline: data.deadline, substeps: []
     });
     store.set('goals', goals);
@@ -333,7 +338,7 @@ function executeAction(type, data){
   return false;
 }
 
-/* ---------- ОПИСАНИЕ (для истории и для черновика) ---------- */
+/* ---------- ОПИСАНИЕ ---------- */
 function describeAction(type, data){
   if(type === 'note'){
     let targetName = '';
@@ -349,7 +354,7 @@ function describeAction(type, data){
     }
     return `Заметка к ${targetName}: ${data.text}`;
   }
-  if(type === 'add_step') return `Добавить шаг «${data.text}» (дедлайн ${data.deadline})`;
+  if(type === 'add_step') return `Добавить шаг «${data.text}» (результат: ${data.result}, дедлайн ${data.deadline})`;
   if(type === 'add_substep') return `Добавить подшаг «${data.text}» (дедлайн ${data.deadline})`;
   if(type === 'add_habit'){
     const p = data.period === 'day' ? 'день' : 'неделю';
@@ -379,7 +384,7 @@ function describeAction(type, data){
 }
 
 /* ==================================================================
-   ЧЕРНОВИК ДЕЙСТВИЙ (внутри активного анализа)
+   ЧЕРНОВИК ДЕЙСТВИЙ
 ================================================================== */
 
 function getDraftActions(){
@@ -418,7 +423,6 @@ function confirmAddAction(){
   const data = collectActionData(type);
   if(!data) return;
 
-  // защита: заметка на то же самое дважды
   if(type === 'note'){
     const key = noteTargetKey(data.target);
     const existing = collectDraftNoteKeys();
