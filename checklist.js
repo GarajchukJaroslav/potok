@@ -1,8 +1,9 @@
 /* ==================================================================
-   ЧЕКЛИСТ — авто-события + свои «не хочу» + авто-анализ результатов
+   ЧЕКЛИСТ — авто-события привычек + свои «не хочу» + результаты
+   Канбан снесён — соответствующие события больше не генерируются.
 ================================================================== */
 
-/* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ (привычки + канбан) ---------- */
+/* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ ---------- */
 function generateChecklistEvents(){
   const before = checklistEvents.length;
 
@@ -43,40 +44,9 @@ function generateChecklistEvents(){
     }
   });
 
-  goals.forEach(g => {
-    if(g.done) return;
-    (g.steps || []).forEach(step => {
-      const subs = step.substeps || [];
-      if(subs.length === 0){
-        checkTaskOverdue(g.id, step.id, null, step, g.text);
-      } else {
-        subs.forEach(ss => checkTaskOverdue(g.id, step.id, ss.id, ss, g.text + ' → ' + step.text));
-      }
-    });
-  });
-
   if(checklistEvents.length !== before){
     store.set('checklistEvents', checklistEvents);
   }
-}
-
-function checkTaskOverdue(goalId, stepId, substepId, task, crumb){
-  if(task.status === 'done') return;
-  if(!task.deadline) return;
-  if(task.deadline < SYSTEM_START_DATE) return;
-
-  // генерируем событие за ВЧЕРА, если задача была просрочена вчера
-  const y = new Date(); y.setDate(y.getDate() - 1);
-  const yStr = dayStr(y);
-  if(task.deadline > yStr) return;
-
-  const refId = substepId ? (stepId + ':' + substepId) : stepId;
-  addEventIfMissing('kanban', refId, yStr, {
-    title: task.text,
-    detail: 'не выполнено (дедлайн ' + task.deadline + ')',
-    goalId, stepId, substepId,
-    crumb
-  });
 }
 
 function addEventIfMissing(source, refId, date, info){
@@ -87,7 +57,7 @@ function addEventIfMissing(source, refId, date, info){
   );
   if(exists) return;
 
-  checklistEvents.push({
+  const evt = {
     id: uid(),
     date,
     source,
@@ -109,7 +79,12 @@ function addEventIfMissing(source, refId, date, info){
     childrenIds: null,
     mergedIntoId: null,
     manualType: null
-  });
+  };
+  checklistEvents.push(evt);
+
+  logAction('event_created', {
+    kind: 'event', id: evt.id, name: info.title
+  }, { source, date, detail: info.detail });
 }
 
 /* ---------- ПЕРЕКЛЮЧАТЕЛЬ КАТЕГОРИИ ---------- */
@@ -141,8 +116,7 @@ function openManualPicker(){
       title: h.name,
       crumb: null,
       refType: 'habit',
-      refId: h.id,
-      disabled: false
+      refId: h.id
     });
   });
 
@@ -153,25 +127,23 @@ function openManualPicker(){
       if(subs.length === 0){
         if(step.status === 'done') return;
         tasks.push({
-          value: 'kanban:' + g.id + ':' + step.id,
-          group: 'Канбан',
+          value: 'step:' + g.id + ':' + step.id,
+          group: 'Шаги',
           title: step.text,
           crumb: g.text,
-          refType: 'kanban',
-          refId: step.id,
-          disabled: false
+          refType: 'step',
+          refId: step.id
         });
       } else {
         subs.forEach(ss => {
           if(ss.status === 'done') return;
           tasks.push({
-            value: 'kanban:' + g.id + ':' + step.id + ':' + ss.id,
-            group: 'Канбан',
+            value: 'substep:' + g.id + ':' + step.id + ':' + ss.id,
+            group: 'Подшаги',
             title: ss.text,
             crumb: g.text + ' → ' + step.text,
-            refType: 'kanban',
-            refId: step.id + ':' + ss.id,
-            disabled: false
+            refType: 'substep',
+            refId: step.id + ':' + ss.id
           });
         });
       }
@@ -228,7 +200,6 @@ function createManualEvent(){
 
   const value = sel.value;
   const date = dateInp.value;
-  const type = 'want';
 
   if(!value){ alert('Выбери задачу'); sel.focus(); return; }
   if(!date){ alert('Укажи дату'); dateInp.focus(); return; }
@@ -242,7 +213,7 @@ function createManualEvent(){
 
   const dup = checklistEvents.find(e =>
     e.source === 'manual' &&
-    e.manualType === type &&
+    e.manualType === 'want' &&
     e.refType === refType &&
     e.refId === refId &&
     e.date === date &&
@@ -254,7 +225,7 @@ function createManualEvent(){
     id: uid(),
     date,
     source: 'manual',
-    manualType: type,
+    manualType: 'want',
     refType,
     refId,
     title,
@@ -296,7 +267,11 @@ function renderChecklist(){
   if(autoList){
     autoList.innerHTML = '';
     const auto = checklistEvents
-      .filter(e => e.status !== 'merged' && e.source !== 'manual' && e.source !== 'result')
+      .filter(e => e.status !== 'merged'
+        && e.source !== 'manual'
+        && e.source !== 'result'
+        && e.source !== 'kanban'
+        && isAfterStart(e.date))
       .sort((a,b) => {
         const aDone = a.status === 'resolved' ? 1 : 0;
         const bDone = b.status === 'resolved' ? 1 : 0;
@@ -308,7 +283,7 @@ function renderChecklist(){
       autoList.innerHTML = `
         <div class="empty">
           <span class="empty-icon">✨</span>
-          Пока чисто. Все привычки сделаны, задачи не просрочены.
+          Пока чисто. Все привычки сделаны.
         </div>`;
     } else {
       auto.forEach(e => autoList.appendChild(buildEventCard(e)));
@@ -324,16 +299,17 @@ function renderChecklist(){
       items = checklistEvents.filter(e =>
         e.status !== 'merged' &&
         e.source === 'manual' &&
-        e.manualType === 'want'
+        e.manualType === 'want' &&
+        isAfterStart(e.date)
       );
       emptyIcon = '💭';
       emptyMsg = 'Что-то не хочется делать? Жми +';
     } else {
       items = checklistEvents.filter(e =>
-        e.status !== 'merged' && e.source === 'result'
+        e.status !== 'merged' && e.source === 'result' && isAfterStart(e.date)
       );
       emptyIcon = '🎯';
-      emptyMsg = 'События появятся автоматически, когда завершишь шаг и ответишь на вопрос про результат';
+      emptyMsg = 'События появятся, когда завершишь шаг и ответишь на вопрос про результат';
     }
 
     items.sort((a,b) => {
@@ -379,8 +355,8 @@ function buildEventCard(e){
     sourceIcon = e.achieved ? '✓' : '✗';
     titleHtml = escapeHtml(e.title);
   } else {
-    sourceLabel = e.source === 'habit' ? 'ЗОЖ' : (e.source === 'kanban' ? 'Канбан' : 'Своё');
-    sourceIcon = e.source === 'habit' ? '🎯' : (e.source === 'kanban' ? '📋' : '💭');
+    sourceLabel = e.source === 'habit' ? 'ЗОЖ' : 'Своё';
+    sourceIcon = e.source === 'habit' ? '🎯' : '💭';
     titleHtml = escapeHtml(e.title);
   }
 
@@ -404,8 +380,8 @@ function buildEventCard(e){
   if(e.source === 'merged'){
     const kids = getMergedChildren(e);
     childrenHtml = `<div class="event-children">${kids.map(k => {
-      const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : (k.source === 'result' ? '✓' : '💭'));
-      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'kanban' ? 'Канбан' : (k.source === 'result' ? 'Результат' : 'Своё'));
+      const icon = k.source === 'habit' ? '🎯' : (k.source === 'result' ? '✓' : '💭');
+      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'result' ? 'Результат' : 'Своё');
       return `<div class="event-child"><span class="event-child-icon">${icon}</span><span class="event-child-label">${label}</span><span class="event-child-title">${escapeHtml(k.title)}</span></div>`;
     }).join('')}</div>`;
   }
