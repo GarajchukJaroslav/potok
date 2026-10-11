@@ -23,8 +23,6 @@
       <div class="page-title no-back">
         🎯 Цели
       </div>
-
-      <div id="startBlock"></div>
       <div class="goals-bar" id="goalsBar">
         <input id="goalInput" placeholder="Новая цель..." maxlength="200">
         <input type="date" id="goalDeadline" class="date-input" title="Дедлайн цели">
@@ -41,38 +39,26 @@
       <div class="page-title">
         💪 Рутина / ЗОЖ
       </div>
-      <div class="cols cols-routine">
-        <div class="card">
-          <div class="card-head">
-            <div class="card-icon p1">🎯</div>
-            <div style="flex:1">
-              <div class="card-title">Привычки</div>
-              <div class="card-sub" id="habitSub"></div>
-            </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-icon p1">🎯</div>
+          <div style="flex:1">
+            <div class="card-title">Привычки</div>
+            <div class="card-sub" id="habitSub"></div>
           </div>
-          <div class="input-row">
-            <input id="habitInput" placeholder="Новая привычка..." maxlength="80">
-            <button class="btn-add" onclick="addHabit()">+</button>
-          </div>
-          <div class="presets" id="presets">
-            <button class="preset active" data-target="1" data-period="day">ежедневно</button>
-            <button class="preset" data-target="2" data-period="day">2× в день</button>
-            <button class="preset" data-target="3" data-period="day">3× в день</button>
-            <button class="preset" data-target="3" data-period="week">3× в неделю</button>
-            <button class="preset" data-target="5" data-period="week">5× в неделю</button>
-          </div>
-          <div class="list" id="habitList"></div>
         </div>
-
-        <div class="card">
-          <div class="card-head">
-            <div class="card-icon p2">📋</div>
-            <div>
-              <div class="card-title">Канбан</div>
-            </div>
-          </div>
-          <div class="kanban" id="kanban"></div>
+        <div class="input-row" id="habitInputRow">
+          <input id="habitInput" placeholder="Новая привычка..." maxlength="80">
+          <button class="btn-add" onclick="addHabit()">+</button>
         </div>
+        <div class="presets" id="presets">
+          <button class="preset active" data-target="1" data-period="day">ежедневно</button>
+          <button class="preset" data-target="2" data-period="day">2× в день</button>
+          <button class="preset" data-target="3" data-period="day">3× в день</button>
+          <button class="preset" data-target="3" data-period="week">3× в неделю</button>
+          <button class="preset" data-target="5" data-period="week">5× в неделю</button>
+        </div>
+        <div class="list" id="habitList"></div>
       </div>
     </div>
     <button class="nav-btn nav-up" onclick="goUp()" title="Назад">↑</button>
@@ -169,6 +155,26 @@
   </div>
 </div>
 
+<!-- МОДАЛКА: РЕЗУЛЬТАТ ДОСТИГНУТ? -->
+<div class="manual-overlay" id="resultCheckOverlay">
+  <div class="manual-modal result-check-modal">
+    <div class="manual-modal-head">
+      <div class="manual-modal-title">Результат достигнут?</div>
+    </div>
+    <div class="result-check-body">
+      <div class="result-check-step" id="resultCheckStep"></div>
+      <div class="result-check-expected">
+        <span class="result-check-label">Результат:</span>
+        <span id="resultCheckExpected"></span>
+      </div>
+    </div>
+    <div class="manual-actions">
+      <button class="manual-btn danger" onclick="answerResultCheck(false)">✗ Нет</button>
+      <button class="manual-btn success" onclick="answerResultCheck(true)">✓ Да</button>
+    </div>
+  </div>
+</div>
+
 <!-- МОДАЛКА ДОБАВЛЕНИЯ ДЕЙСТВИЯ -->
 <div class="manual-overlay" id="actionPickerOverlay" onclick="if(event.target===this) closeActionPicker()">
   <div class="manual-modal">
@@ -199,26 +205,6 @@
       <button class="manual-btn accent" onclick="confirmAddAction()">Добавить</button>
     </div>
   </div>
-</div>  
-
-<!-- МОДАЛКА: РЕЗУЛЬТАТ ДОСТИГНУТ? -->
-<div class="manual-overlay" id="resultCheckOverlay">
-  <div class="manual-modal result-check-modal">
-    <div class="manual-modal-head">
-      <div class="manual-modal-title">Результат достигнут?</div>
-    </div>
-    <div class="result-check-body">
-      <div class="result-check-step" id="resultCheckStep"></div>
-      <div class="result-check-expected">
-        <span class="result-check-label">Результат:</span>
-        <span id="resultCheckExpected"></span>
-      </div>
-    </div>
-    <div class="manual-actions">
-      <button class="manual-btn danger" onclick="answerResultCheck(false)">✗ Нет</button>
-      <button class="manual-btn success" onclick="answerResultCheck(true)">✓ Да</button>
-    </div>
-  </div>
 </div>
 
 <!-- БЛОК СИСТЕМЫ -->
@@ -229,7 +215,6 @@
 <script src="core.js"></script>
 <script src="goals.js"></script>
 <script src="routine.js"></script>
-<script src="kanban.js"></script>
 <script src="checklist.js"></script>
 <script src="block.js"></script>
 <script src="actions.js"></script>
