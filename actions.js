@@ -1,5 +1,6 @@
 /* ==================================================================
    ACTIONS — структурные действия из анализа
+   Все изменения логируются в actionLog (source: 'analysis')
 ================================================================== */
 
 /* ---------- ПОИСК ---------- */
@@ -60,7 +61,6 @@ function optionsSubsteps(){
   return html;
 }
 
-/* Куда можно добавить заметку, исключая то, куда уже есть заметка в этом анализе */
 function optionsNoteTargets(excludeKeys){
   excludeKeys = excludeKeys || new Set();
   let html = '<option value="">— куда добавить заметку —</option>';
@@ -112,7 +112,7 @@ function collectDraftNoteKeys(){
   return set;
 }
 
-/* ---------- ПОСТРОЕНИЕ ФОРМЫ ПОД ТИП ---------- */
+/* ---------- ПОСТРОЕНИЕ ФОРМЫ ---------- */
 function buildActionFormHTML(type){
   if(type === 'note'){
     const excluded = collectDraftNoteKeys();
@@ -149,15 +149,9 @@ function buildActionFormHTML(type){
       </div>
     `;
   }
-  if(type === 'del_step'){
-    return `<select class="action-select" id="actStep">${optionsSteps()}</select>`;
-  }
-  if(type === 'del_substep'){
-    return `<select class="action-select" id="actSubstep">${optionsSubsteps()}</select>`;
-  }
-  if(type === 'del_habit'){
-    return `<select class="action-select" id="actHabit">${optionsHabits()}</select>`;
-  }
+  if(type === 'del_step') return `<select class="action-select" id="actStep">${optionsSteps()}</select>`;
+  if(type === 'del_substep') return `<select class="action-select" id="actSubstep">${optionsSubsteps()}</select>`;
+  if(type === 'del_habit') return `<select class="action-select" id="actHabit">${optionsHabits()}</select>`;
   if(type === 'shift_step_deadline'){
     return `
       <select class="action-select" id="actStep">${optionsSteps()}</select>
@@ -173,7 +167,7 @@ function buildActionFormHTML(type){
   return '';
 }
 
-/* ---------- СБОР ДАННЫХ ИЗ ФОРМЫ ---------- */
+/* ---------- СБОР ДАННЫХ ---------- */
 function collectActionData(type){
   const data = {};
 
@@ -253,7 +247,7 @@ function collectActionData(type){
   return data;
 }
 
-/* ---------- ВЫПОЛНЕНИЕ ---------- */
+/* ---------- ВЫПОЛНЕНИЕ + ЛОГ ---------- */
 function executeAction(type, data){
   if(type === 'note'){
     let entity = null;
@@ -263,6 +257,12 @@ function executeAction(type, data){
     if(!entity) return false;
     if(!entity.notes) entity.notes = [];
     entity.notes.push({ id: uid(), text: data.text, date: new Date().toISOString() });
+    logAction('note_added', {
+      kind: data.target.kind,
+      id: entity.id, name: entity.name || entity.text,
+      goalId: data.target.goalId || null,
+      stepId: data.target.stepId || null
+    }, { source: 'analysis', text: data.text });
     store.set('habits', habits);
     store.set('goals', goals);
     return true;
@@ -271,7 +271,7 @@ function executeAction(type, data){
     const g = findGoal(data.goalId);
     if(!g) return false;
     if(!Array.isArray(g.steps)) g.steps = [];
-    g.steps.push({
+    const step = {
       id: uid(), text: data.text,
       result: data.result,
       resultChecked: false,
@@ -279,7 +279,12 @@ function executeAction(type, data){
       resultEventId: null,
       status: 'todo', lastStatus: 'todo',
       deadline: data.deadline, substeps: []
-    });
+    };
+    g.steps.push(step);
+    logAction('step_created', {
+      kind: 'step', id: step.id, name: step.text,
+      goalId: g.id
+    }, { source: 'analysis', deadline: data.deadline, result: data.result });
     store.set('goals', goals);
     return true;
   }
@@ -287,51 +292,84 @@ function executeAction(type, data){
     const s = findStep(data.goalId, data.stepId);
     if(!s) return false;
     if(!Array.isArray(s.substeps)) s.substeps = [];
-    s.substeps.push({
-      id: uid(), text: data.text, status: 'todo', lastStatus: 'todo',
-      deadline: data.deadline
-    });
+    const sub = { id: uid(), text: data.text, status: 'todo', lastStatus: 'todo', deadline: data.deadline };
+    s.substeps.push(sub);
+    logAction('substep_created', {
+      kind: 'substep', id: sub.id, name: sub.text,
+      goalId: data.goalId, stepId: data.stepId
+    }, { source: 'analysis', deadline: data.deadline });
     store.set('goals', goals);
     return true;
   }
   if(type === 'add_habit'){
-    habits.push({
+    const habit = {
       id: uid(), name: data.text, target: data.target, period: data.period,
-      createdAt: todayStr(), log: {}, slots: {}
-    });
+      createdAt: todayStr(), log: {}, slots: {}, notes: []
+    };
+    habits.push(habit);
+    logAction('habit_created', {
+      kind: 'habit', id: habit.id, name: habit.name
+    }, { source: 'analysis', target: habit.target, period: habit.period });
     store.set('habits', habits);
     return true;
   }
   if(type === 'del_step'){
     const g = findGoal(data.goalId);
     if(!g) return false;
-    g.steps = (g.steps || []).filter(s => s.id !== data.stepId);
+    const s = g.steps.find(x => x.id === data.stepId);
+    if(!s) return false;
+    logAction('step_deleted', {
+      kind: 'step', id: s.id, name: s.text,
+      goalId: g.id
+    }, { source: 'analysis' });
+    g.steps = g.steps.filter(x => x.id !== data.stepId);
     store.set('goals', goals);
     return true;
   }
   if(type === 'del_substep'){
     const s = findStep(data.goalId, data.stepId);
     if(!s) return false;
-    s.substeps = (s.substeps || []).filter(ss => ss.id !== data.substepId);
+    const ss = s.substeps.find(x => x.id === data.substepId);
+    if(!ss) return false;
+    logAction('substep_deleted', {
+      kind: 'substep', id: ss.id, name: ss.text,
+      goalId: data.goalId, stepId: data.stepId
+    }, { source: 'analysis' });
+    s.substeps = s.substeps.filter(x => x.id !== data.substepId);
     store.set('goals', goals);
     return true;
   }
   if(type === 'del_habit'){
-    habits = habits.filter(h => h.id !== data.habitId);
+    const h = findHabit(data.habitId);
+    if(!h) return false;
+    logAction('habit_deleted', {
+      kind: 'habit', id: h.id, name: h.name
+    }, { source: 'analysis' });
+    habits = habits.filter(x => x.id !== data.habitId);
     store.set('habits', habits);
     return true;
   }
   if(type === 'shift_step_deadline'){
     const s = findStep(data.goalId, data.stepId);
     if(!s) return false;
+    const before = s.deadline;
     s.deadline = data.deadline;
+    logAction('step_deadline_changed', {
+      kind: 'step', id: s.id, name: s.text,
+      goalId: data.goalId
+    }, { source: 'analysis', before, after: data.deadline });
     store.set('goals', goals);
     return true;
   }
   if(type === 'shift_substep_deadline'){
     const ss = findSubstep(data.goalId, data.stepId, data.substepId);
     if(!ss) return false;
+    const before = ss.deadline;
     ss.deadline = data.deadline;
+    logAction('substep_deadline_changed', {
+      kind: 'substep', id: ss.id, name: ss.text,
+      goalId: data.goalId, stepId: data.stepId
+    }, { source: 'analysis', before, after: data.deadline });
     store.set('goals', goals);
     return true;
   }
@@ -383,10 +421,7 @@ function describeAction(type, data){
   return 'Действие';
 }
 
-/* ==================================================================
-   ЧЕРНОВИК ДЕЙСТВИЙ
-================================================================== */
-
+/* ---------- ЧЕРНОВИК ---------- */
 function getDraftActions(){
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return [];
