@@ -36,10 +36,8 @@ function goUp(){ goTo(currentIndex - 1); }
 function init(){
   if(typeof generateChecklistEvents === 'function') generateChecklistEvents();
 
-  if(typeof renderStartBlock === 'function') renderStartBlock();
   renderGoalList();
   renderHabits();
-  renderKanban();
   renderChecklist();
   renderAnalysis();
 
@@ -96,16 +94,15 @@ function init(){
 
   if(globalTicker) clearInterval(globalTicker);
   globalTicker = setInterval(() => {
-    if(!isStarted()) return;
     if(typeof generateChecklistEvents === 'function') generateChecklistEvents();
     if(typeof checkSystemBlock === 'function') checkSystemBlock();
-
-    if(typeof checkPendingResultChecks === 'function'){
-       setTimeout(checkPendingResultChecks, 1000);
-    } 
   }, 15000);
 
-  if(isStarted() && typeof checkSystemBlock === 'function') checkSystemBlock();
+  if(typeof checkSystemBlock === 'function') checkSystemBlock();
+
+  if(typeof checkPendingResultChecks === 'function'){
+    setTimeout(checkPendingResultChecks, 1000);
+  }
 
   /* ============ PWA ============ */
   if('serviceWorker' in navigator){
