@@ -63,13 +63,17 @@ function generateChecklistEvents(){
 function checkTaskOverdue(goalId, stepId, substepId, task, crumb){
   if(task.status === 'done') return;
   if(!task.deadline) return;
-  if(task.deadline >= todayStr()) return;
   if(task.deadline < SYSTEM_START_DATE) return;
 
+  // генерируем событие за ВЧЕРА, если задача была просрочена вчера
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const yStr = dayStr(y);
+  if(task.deadline > yStr) return;
+
   const refId = substepId ? (stepId + ':' + substepId) : stepId;
-  addEventIfMissing('kanban', refId, task.deadline, {
+  addEventIfMissing('kanban', refId, yStr, {
     title: task.text,
-    detail: 'не выполнено',
+    detail: 'не выполнено (дедлайн ' + task.deadline + ')',
     goalId, stepId, substepId,
     crumb
   });
