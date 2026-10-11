@@ -1,13 +1,12 @@
 /* ==================================================================
    БЛОК СИСТЕМЫ — 3 причины:
-   1) 24ч без реакции на событие (кроме achieved result)
-   2) Просрочен таймер анализа (кроме achieved result)
-   3) Одна сущность провалена ≥3 раз за текущий месяц
+   1) 24ч без реакции
+   2) Просрочен таймер анализа
+   3) Систематический провал ≥3 раз/месяц
+   Кнопка «Скипнуть» — событие уходит в skipped, больше не блокирует.
 ================================================================== */
 
 function checkSystemBlock(){
-  if(!isStarted()) return;
-
   if(systemBlock.active){
     const overlay = document.getElementById('blockOverlay');
     if(overlay && overlay.classList.contains('open')) return;
@@ -16,8 +15,11 @@ function checkSystemBlock(){
   }
 
   const now = Date.now();
+  const skipped = store.get('skippedBlocks', []);
   const active = checklistEvents.filter(e =>
-    e.status === 'new' || e.status === 'in_progress'
+    (e.status === 'new' || e.status === 'in_progress') &&
+    isAfterStart(e.date) &&
+    !skipped.includes(e.id)
   );
 
   // 1) 24ч без реакции
@@ -44,16 +46,19 @@ function checkSystemBlock(){
   const repeats = findRepeatFails();
   if(repeats.length > 0){
     const first = repeats[0];
-    triggerBlock(
-      'repeat_fail',
-      first.events.map(e => e.id),
-      {
-        source: first.source,
-        refId: first.refId,
-        title: first.title,
-        count: first.events.length
-      }
-    );
+    const idsToBlock = first.events.map(e => e.id).filter(id => !skipped.includes(id));
+    if(idsToBlock.length >= 3){
+      triggerBlock(
+        'repeat_fail',
+        idsToBlock,
+        {
+          source: first.source,
+          refId: first.refId,
+          title: first.title,
+          count: first.events.length
+        }
+      );
+    }
   }
 }
 
@@ -67,7 +72,7 @@ function findRepeatFails(){
   const groups = {};
 
   checklistEvents.forEach(e => {
-    if(e.source !== 'habit' && e.source !== 'kanban') return;
+    if(e.source !== 'habit') return;
     if(!e.refId) return;
     const d = new Date(e.date + 'T12:00:00');
     if(isNaN(d)) return;
@@ -100,6 +105,11 @@ function triggerBlock(reason, eventIds, meta){
   systemBlock.meta = meta || null;
   systemBlock.resolution = null;
   store.set('systemBlock', systemBlock);
+
+  logAction('system_block_triggered', {
+    kind: 'block', id: uid(), name: reason
+  }, { reason, events: eventIds });
+
   renderSystemBlock(true);
 }
 
@@ -113,9 +123,7 @@ function renderSystemBlock(force){
     return;
   }
 
-  if(overlay.classList.contains('open') && !force){
-    return;
-  }
+  if(overlay.classList.contains('open') && !force) return;
 
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -129,15 +137,15 @@ function renderSystemBlock(force){
 
   if(systemBlock.reason === 'analysis_timeout'){
     reasonTitle = '⏱ Анализ просрочен';
-    reasonMessage = 'Система заблокирована. Обсуди проблемы с внешним человеком — тренером, другом, наставником — и зафиксируй решения.';
+    reasonMessage = 'Обсуди проблемы с внешним человеком — тренером, другом, наставником — и зафиксируй решения. Или скипни, если считаешь, что справишься сам.';
   } else if(systemBlock.reason === 'repeat_fail' && systemBlock.meta){
     reasonTitle = '🔁 Систематический провал';
     const m = systemBlock.meta;
     const srcLabel = m.source === 'habit' ? 'Привычка' : 'Задача';
-    reasonMessage = `<b>${escapeHtml(m.title)}</b><br><span style="font-size:13px;opacity:0.75;">${srcLabel} провалена <b>${m.count}</b> раз за этот месяц. Это уже паттерн, а не случайность. Обсуди с ментором.</span>`;
+    reasonMessage = `<b>${escapeHtml(m.title)}</b><br><span style="font-size:13px;opacity:0.75;">${srcLabel} провалена <b>${m.count}</b> раз за этот месяц. Это уже паттерн, а не случайность.</span>`;
   } else {
     reasonTitle = '⚠ Требуется внешняя помощь';
-    reasonMessage = 'Система заблокирована. Обсуди проблемы с внешним человеком — тренером, другом, наставником — и зафиксируй решения.';
+    reasonMessage = 'Обсуди проблемы с внешним человеком — тренером, другом, наставником — и зафиксируй решения. Или скипни, если считаешь, что справишься сам.';
   }
 
   function eventBlockHtml(e){
@@ -149,18 +157,12 @@ function renderSystemBlock(force){
       title = `${kids.length} ${plural(kids.length,'событие','события','событий')}`;
       detailHtml = '';
       childrenHtml = `<div class="block-event-children">${kids.map(k => {
-        const icon = k.source === 'habit' ? '🎯' : (k.source === 'kanban' ? '📋' : (k.source === 'result' ? '✓' : '💭'));
-        const label = k.source === 'habit' ? 'ЗОЖ'
-                    : (k.source === 'kanban' ? 'Канбан'
-                    : (k.source === 'result' ? 'Результат' : 'Своё'));
+        const icon = k.source === 'habit' ? '🎯' : (k.source === 'result' ? '✓' : '💭');
+        const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'result' ? 'Результат' : 'Своё');
         return `<div class="block-event-child"><span>${icon}</span><span class="block-event-child-label">${label}</span><span class="block-event-child-title">${escapeHtml(k.title)}</span></div>`;
       }).join('')}</div>`;
     } else if(e.source === 'habit'){
       src = '🎯 ЗОЖ';
-      title = e.title;
-      detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
-    } else if(e.source === 'kanban'){
-      src = '📋 Канбан';
       title = e.title;
       detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
     } else if(e.source === 'result'){
@@ -168,7 +170,7 @@ function renderSystemBlock(force){
       title = e.title;
       detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
     } else if(e.source === 'manual'){
-      src = e.manualType === 'result' ? '🎯 Результат' : '💭 Своё';
+      src = '💭 Своё';
       title = e.title;
       detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
     } else {
@@ -235,9 +237,12 @@ function renderSystemBlock(force){
       ${solutionsFormHtml}
     </div>
 
-    <button class="block-confirm-btn" onclick="confirmBlockResolution()">
-      Подтвердить, что обсудил
-    </button>
+    <div class="block-actions">
+      <button class="block-skip-btn" onclick="skipSystemBlock()">Скипнуть сейчас</button>
+      <button class="block-confirm-btn" onclick="confirmBlockResolution()">
+        Подтвердить, что обсудил
+      </button>
+    </div>
   `;
 }
 
@@ -303,16 +308,17 @@ function confirmBlockResolution(){
     store.set('checklistEvents', checklistEvents);
   }
 
+  logAction('system_block_resolved', {
+    kind: 'block', id: uid(), name: systemBlock.reason
+  }, { discussedWith: whoVal });
+
   systemBlock = {
     active: false,
     reason: null,
     blockedAt: null,
     events: [],
     meta: null,
-    resolution: {
-      discussedWith: whoVal,
-      resolvedAt: now
-    }
+    resolution: { discussedWith: whoVal, resolvedAt: now }
   };
   store.set('systemBlock', systemBlock);
 
@@ -322,5 +328,36 @@ function confirmBlockResolution(){
 
   if(typeof renderChecklist === 'function') renderChecklist();
   if(typeof renderAnalysis === 'function') renderAnalysis();
-  if(typeof renderKanban === 'function') renderKanban();
+}
+
+function skipSystemBlock(){
+  if(!systemBlock.active) return;
+  if(!confirm('Скипнуть блок? События останутся в чеклисте и больше не будут вызывать блок.')) return;
+
+  const skipped = store.get('skippedBlocks', []);
+  systemBlock.events.forEach(id => {
+    if(!skipped.includes(id)) skipped.push(id);
+  });
+  store.set('skippedBlocks', skipped);
+
+  logAction('system_block_skipped', {
+    kind: 'block', id: uid(), name: systemBlock.reason
+  }, { reason: systemBlock.reason, events: systemBlock.events });
+
+  systemBlock = {
+    active: false,
+    reason: null,
+    blockedAt: null,
+    events: [],
+    meta: null,
+    resolution: { skipped: true, skippedAt: Date.now() }
+  };
+  store.set('systemBlock', systemBlock);
+
+  const overlay = document.getElementById('blockOverlay');
+  if(overlay) overlay.classList.remove('open');
+  document.body.style.overflow = '';
+
+  if(typeof renderChecklist === 'function') renderChecklist();
+  if(typeof renderAnalysis === 'function') renderAnalysis();
 }
