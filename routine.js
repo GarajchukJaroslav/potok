@@ -1,24 +1,30 @@
 /* ==================================================================
-   ЭКРАН «РУТИНА / ЗОЖ» (привычки) + МОДАЛКА ИСТОРИИ + режим СТАРТ
+   ЭКРАН «РУТИНА / ЗОЖ» (привычки) + МОДАЛКА ИСТОРИИ
+   Без запретов. Лог: создание/удаление привычек.
+   Галочки/слоты не логируются — это сама фиксация.
 ================================================================== */
 
 let habitDraft = { target: 1, period: 'day' };
 
 /* ============ ПРИВЫЧКИ ============ */
 function addHabit(){
-  if(!canPlan()){ blockedAfterStart(); return; }
   const inp = document.getElementById('habitInput');
   const v = inp.value.trim();
   if(!v) return;
-  habits.push({
+  const habit = {
     id: uid(),
     name: v,
     target: habitDraft.target,
     period: habitDraft.period,
     createdAt: todayStr(),
     log: {},
-    slots: {}
-  });
+    slots: {},
+    notes: []
+  };
+  habits.push(habit);
+  logAction('habit_created', {
+    kind: 'habit', id: habit.id, name: habit.name
+  }, { target: habit.target, period: habit.period });
   inp.value = '';
   store.set('habits', habits);
   renderHabits();
@@ -26,7 +32,6 @@ function addHabit(){
 }
 
 function clickHabit(id){
-  if(!canExecute()){ blockedBeforeStart(); return; }
   const h = habits.find(x => x.id === id);
   if(!h) return;
   const t = todayStr();
@@ -57,7 +62,6 @@ function clickHabit(id){
 }
 
 function decHabit(id){
-  if(!canExecute()){ blockedBeforeStart(); return; }
   const h = habits.find(x => x.id === id);
   if(!h) return;
   const t = todayStr();
@@ -84,8 +88,12 @@ function decHabit(id){
 }
 
 function delHabit(id){
-  if(!canPlan()){ blockedAfterStart(); return; }
+  const h = habits.find(x => x.id === id);
+  if(!h) return;
   if(!confirm('Удалить привычку и всю её историю?')) return;
+  logAction('habit_deleted', {
+    kind: 'habit', id: h.id, name: h.name
+  });
   habits = habits.filter(x => x.id !== id);
   store.set('habits', habits);
   renderHabits();
@@ -170,7 +178,6 @@ function renderHabits(){
   const list = document.getElementById('habitList');
   if(!list) return;
   list.innerHTML = '';
-  const locked = isStarted();
 
   if(habits.length === 0){
     list.innerHTML = '<div class="empty"><span class="empty-icon">🌱</span>Пока пусто.<br>Добавь первую привычку и выбери периодичность.</div>';
@@ -196,12 +203,9 @@ function renderHabits(){
       else metaBadges += `<span class="week-mini zero">📅 0 недель подряд</span>`;
     }
 
-    const decBtn = (!isSingle && !locked)
+    const decBtn = !isSingle
       ? `<button class="icon-btn" onclick="decHabit('${h.id}')" title="минус">−</button>`
       : '';
-    const delBtn = locked
-      ? ''
-      : `<button class="icon-btn danger" onclick="delHabit('${h.id}')" title="удалить">✕</button>`;
 
     el.innerHTML = `
       <button class="${checkClass}${done ? ' done' : ''}" onclick="clickHabit('${h.id}')">${checkContent}</button>
@@ -215,7 +219,7 @@ function renderHabits(){
       <div class="mini-cal" onclick="openHabitModal('${h.id}')" title="Открыть историю">${renderMiniCal(h)}</div>
       <div class="habit-actions">
         ${decBtn}
-        ${delBtn}
+        <button class="icon-btn danger" onclick="delHabit('${h.id}')" title="удалить">✕</button>
       </div>`;
     list.appendChild(el);
   });
@@ -227,12 +231,6 @@ function renderHabits(){
   }).length;
   const sub = document.getElementById('habitSub');
   if(sub) sub.textContent = total === 0 ? '' : `выполнено ${doneCount} из ${total}`;
-
-  // Прячем инпут и пресеты после старта
-  const inpRow = document.querySelector('#habitInput')?.closest('.input-row');
-  const presetsEl = document.getElementById('presets');
-  if(inpRow) inpRow.style.display = locked ? 'none' : 'flex';
-  if(presetsEl) presetsEl.style.display = locked ? 'none' : 'flex';
 }
 
 /* ---------- СЛОТЫ ---------- */
@@ -254,7 +252,6 @@ function syncLogFromSlots(h, date){
 }
 
 function toggleSlot(habitId, date, slotIndex){
-  if(!canExecute()){ blockedBeforeStart(); return; }
   const h = habits.find(x => x.id === habitId);
   if(!h) return;
   if(date > todayStr()) return;
@@ -398,7 +395,6 @@ function renderHabitDayDetail(h){
   const isFuture = day > todayStr();
   const isWeek = h.period === 'week';
   const isDailyMulti = h.period === 'day' && h.target > 1;
-  const locked = !canExecute();
 
   if(isFuture){
     detail.innerHTML = `
@@ -413,27 +409,10 @@ function renderHabitDayDetail(h){
     const closed = ws >= h.target;
     let segs = '';
     for(let i = 0; i < h.target; i++) segs += `<div class="wb-seg${i < ws ? ' on' : ''}"></div>`;
-    const dayStatus = val > 0 ? '✅ день отмечен' : '⚪ не отмечено';
-    const beforeHint = (day < created) ? `<div class="dd-hint">💡 В приложении привычки тогда ещё не было</div>` : '';
-
-    if(locked){
-      detail.innerHTML = `
-        <div class="dd-date">${dateFmt}</div>
-        <div class="dd-row" style="border-top:none; margin-top:0;">${dayStatus}</div>
-        <div class="week-block">
-          <div class="week-block-title">Прогресс недели</div>
-          <div class="week-bar">${segs}</div>
-          <div class="week-bar-label">
-            <span><b>${ws}</b> / ${h.target} за эту неделю</span>
-            ${closed ? '<span class="week-closed-badge">✅ неделя закрыта</span>' : ''}
-          </div>
-        </div>
-        ${beforeHint}`;
-      return;
-    }
-
     const canDec = val > 0;
     const canInc = val < h.target;
+    const dayStatus = val > 0 ? '✅ день отмечен' : '⚪ не отмечено';
+    const beforeHint = (day < created) ? `<div class="dd-hint">💡 В приложении привычки тогда ещё не было</div>` : '';
     detail.innerHTML = `
       <div class="dd-date">${dateFmt}</div>
       <div class="dd-edit">
@@ -466,7 +445,7 @@ function renderHabitDayDetail(h){
     let slotsHtml = '';
     for(let i = 0; i < h.target; i++){
       const on = slots[i];
-      slotsHtml += `<button class="slot-check${on ? ' done' : ''}" ${locked ? 'disabled' : ''} onclick="toggleSlot('${h.id}','${day}',${i})" title="Раз ${i+1}">${i+1}</button>`;
+      slotsHtml += `<button class="slot-check${on ? ' done' : ''}" onclick="toggleSlot('${h.id}','${day}',${i})" title="Раз ${i+1}">${i+1}</button>`;
     }
 
     let status;
@@ -477,15 +456,6 @@ function renderHabitDayDetail(h){
     const beforeHint = (day < created)
       ? `<div class="dd-hint">💡 В приложении привычки тогда ещё не было</div>`
       : '';
-
-    if(locked){
-      detail.innerHTML = `
-        <div class="dd-date">${dateFmt}</div>
-        <div class="slot-checks">${slotsHtml}</div>
-        <div class="slot-status">${status} · ${doneCount} / ${h.target}</div>
-        ${beforeHint}`;
-      return;
-    }
 
     detail.innerHTML = `
       <div class="dd-date">${dateFmt}</div>
@@ -504,16 +474,6 @@ function renderHabitDayDetail(h){
   else if(val > 0) status = '⏳ частично';
   else status = '❌ не отмечено';
   const beforeHint = (day < created) ? `<div class="dd-hint">💡 В приложении привычки тогда ещё не было</div>` : '';
-
-  if(locked){
-    detail.innerHTML = `
-      <div class="dd-date">${dateFmt}</div>
-      <div class="dd-big" style="text-align:left; margin:10px 0;">${val}<small>/ ${h.target}</small></div>
-      <div class="dd-row" style="border-top:none; margin-top:0;">${status}</div>
-      ${beforeHint}`;
-    return;
-  }
-
   const canDec = val > 0;
   const canInc = val < h.target;
   detail.innerHTML = `
@@ -532,7 +492,6 @@ function renderHabitDayDetail(h){
 }
 
 function habitChangeDay(habitId, dateStr, delta){
-  if(!canExecute()){ blockedBeforeStart(); return; }
   const h = habits.find(x => x.id === habitId);
   if(!h) return;
   if(dateStr > todayStr()) return;
@@ -571,7 +530,6 @@ function habitChangeDay(habitId, dateStr, delta){
 }
 
 function habitSetDay(habitId, dateStr, value){
-  if(!canExecute()){ blockedBeforeStart(); return; }
   const h = habits.find(x => x.id === habitId);
   if(!h) return;
   if(dateStr > todayStr()) return;
