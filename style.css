@@ -2647,3 +2647,40 @@ body::after{
 .btn-save-focus.success:hover{
   box-shadow: 0 6px 24px rgba(34,214,127,0.5);
 }
+
+
+/* ============ КНОПКА "СКИПНУТЬ" В БЛОКЕ ============ */
+.block-actions{
+  display: flex;
+  gap: 10px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.block-skip-btn{
+  flex: 0 0 auto;
+  padding: 14px 22px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 13px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.block-skip-btn:hover{
+  background: rgba(255,255,255,0.12);
+  color: var(--text);
+  border-color: rgba(255,255,255,0.2);
+}
+.block-confirm-btn{
+  flex: 1;
+  min-width: 180px;
+  margin-top: 0;
+}
+
+@media(max-width:640px){
+  .block-actions{ flex-direction: column-reverse; }
+  .block-skip-btn, .block-confirm-btn{ width: 100%; flex: none; }
+}
