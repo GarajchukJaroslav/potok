@@ -1,5 +1,6 @@
 /* ==================================================================
    ЭКРАН «АНАЛИЗ → ДЕЙСТВИЯ»
+   Без запретов. Лог: старт/финиш анализа, мердж, удаление.
 ================================================================== */
 
 let activeAnalysisEventId = null;
@@ -8,7 +9,6 @@ let selectedForMerge = new Set();
 
 /* ---------- СТАРТ / ПРОДОЛЖЕНИЕ ---------- */
 function startAnalysisFromEvent(eventId){
-  if(!canExecute()){ blockedBeforeStart(); return; }
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e) return;
   if(e.status === 'resolved') return;
@@ -20,6 +20,10 @@ function startAnalysisFromEvent(eventId){
   if(!Array.isArray(e.draftActions)) e.draftActions = [];
   store.set('checklistEvents', checklistEvents);
 
+  logAction('analysis_started', {
+    kind: 'event', id: e.id, name: e.title || ''
+  }, { source: e.source });
+
   activeAnalysisEventId = eventId;
   selectedForMerge.clear();
   if(typeof goTo === 'function') goTo(3);
@@ -28,7 +32,6 @@ function startAnalysisFromEvent(eventId){
 }
 
 function resumeAnalysisFromEvent(eventId){
-  if(!canExecute()){ blockedBeforeStart(); return; }
   const e = checklistEvents.find(x => x.id === eventId);
   if(!e || e.status !== 'in_progress') return;
   activeAnalysisEventId = eventId;
@@ -201,6 +204,11 @@ function createMergedEvent(){
     c.mergedIntoId = merged.id;
   });
   checklistEvents.push(merged);
+
+  logAction('event_merged', {
+    kind: 'merged', id: merged.id, name: children.length + ' событий'
+  }, { childrenIds: children.map(c => c.id) });
+
   store.set('checklistEvents', checklistEvents);
   selectedForMerge.clear();
   activeAnalysisEventId = merged.id;
@@ -349,7 +357,9 @@ function renderAnalysisFocus(e){
 function renderAnalysisHome(){
   const homeEl = document.getElementById('analysisHome');
   const active = checklistEvents
-    .filter(e => e.status === 'new' || e.status === 'in_progress')
+    .filter(e => (e.status === 'new' || e.status === 'in_progress')
+      && e.source !== 'kanban'
+      && isAfterStart(e.date))
     .sort((a,b) => b.date.localeCompare(a.date));
 
   const eventsHtml = active.length === 0
@@ -478,7 +488,6 @@ function saveAnalysis(){
 
   const actionLines = draft.map(a => a.description);
 
-  // Выполняем все действия
   for(const a of draft){
     const ok = executeAction(a.type, a.data);
     if(!ok){
@@ -518,6 +527,10 @@ function saveAnalysis(){
   store.set('rules', rules);
   store.set('checklistEvents', checklistEvents);
 
+  logAction('analysis_completed', {
+    kind: 'event', id: e.id, name: e.title || ''
+  }, { source: e.source, actionsCount: draft.length, thoughtId: thought.id });
+
   resolveEvent(e.id, ruleText);
 
   activeAnalysisEventId = null;
@@ -525,7 +538,6 @@ function saveAnalysis(){
 
   renderAnalysis();
   renderChecklist();
-  if(typeof renderKanban === 'function') renderKanban();
   if(typeof renderGoalList === 'function') renderGoalList();
   if(typeof renderHabits === 'function') renderHabits();
 }
@@ -548,8 +560,14 @@ function deleteManualAnalysis(){
   if(!confirm('Удалить событие без решения?')) return;
 
   if(e.source === 'merged'){
+    logAction('event_unmerged', {
+      kind: 'merged', id: e.id, name: 'Объединённое'
+    }, { childrenIds: e.childrenIds });
     unmergeEvent(e.id);
   } else {
+    logAction('event_deleted', {
+      kind: 'event', id: e.id, name: e.title || ''
+    }, { source: e.source });
     checklistEvents = checklistEvents.filter(x => x.id !== e.id);
     store.set('checklistEvents', checklistEvents);
   }
