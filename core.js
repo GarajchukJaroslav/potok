@@ -1,5 +1,5 @@
 /* ==================================================================
-   STORE + UTILS + ГЛОБАЛЬНЫЙ STATE
+   STORE + UTILS + ГЛОБАЛЬНЫЙ STATE + ЖУРНАЛ
 ================================================================== */
 
 const store = {
@@ -11,6 +11,11 @@ const store = {
 };
 
 const SYSTEM_START_DATE = '2026-10-04';
+
+function isAfterStart(dateStr){
+  if(!dateStr) return true;
+  return dateStr >= SYSTEM_START_DATE;
+}
 
 function dayStr(d){
   const y = d.getFullYear();
@@ -94,6 +99,31 @@ function fmtEventDate(dateStr){
   return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
 }
 
+/* ============ ЖУРНАЛ ============ */
+/*
+   Append-only лог всех структурных изменений в системе.
+   Правило: логируем только то, что НЕ имеет собственной отметки
+   в UI (галочки, отметки привычек — сами по себе фиксация).
+*/
+
+function logAction(type, entity, extra){
+  const log = store.get('actionLog', []);
+  log.push({
+    id: uid(),
+    ts: Date.now(),
+    date: todayStr(),
+    type,
+    entity: entity || null,
+    ...(extra || {})
+  });
+  store.set('actionLog', log);
+  return log[log.length - 1];
+}
+
+function getActionLog(){
+  return store.get('actionLog', []);
+}
+
 /* ============ ГЛОБАЛЬНЫЙ STATE ============ */
 let habits  = store.get('habits', []);
 let thoughts = store.get('thoughts', []);
@@ -102,19 +132,6 @@ let goals   = store.get('goals', []);
 let checklistEvents = store.get('checklistEvents', []);
 let systemBlock = store.get('systemBlock', { active:false, reason:null, blockedAt:null, events:[], resolution:null });
 let currentManualType = store.get('manualCurrentType', 'want');
-let potokStarted = store.get('potokStarted', false);
-
-/* ---------- ХЕЛПЕРЫ РЕЖИМА ---------- */
-function isStarted(){ return potokStarted === true; }
-function canPlan(){ return !potokStarted; }
-function canExecute(){ return potokStarted; }
-
-function blockedBeforeStart(){
-  alert('Нажми СТАРТ, чтобы начать выполнять. Пока система не запущена — можно только планировать.');
-}
-function blockedAfterStart(){
-  alert('Система запущена. Изменения в план — только через Анализ → Действия.');
-}
 
 /* ============ МИГРАЦИЯ ============ */
 habits.forEach(h => {
@@ -138,18 +155,18 @@ goals.forEach(g => {
   if(!Array.isArray(g.steps)) g.steps = [];
   g.steps.forEach(s => {
     if(s.deadline === undefined) s.deadline = null;
+    // канбан снесён — 'doing' больше не существует
+    if(s.status === 'doing') s.status = 'todo';
+    if(s.lastStatus === 'doing') s.lastStatus = 'todo';
     if(s.status === undefined) s.status = s.done ? 'done' : 'todo';
     if(!Array.isArray(s.substeps)) s.substeps = [];
     s.substeps.forEach(ss => {
       if(ss.deadline === undefined) ss.deadline = null;
+      if(ss.status === 'doing') ss.status = 'todo';
       if(ss.status === undefined) ss.status = 'todo';
     });
-    // result + resultChecked
     if(s.result === undefined) s.result = '';
-    if(s.resultChecked === undefined){
-      // для старых выполненных шагов не триггерим вопросы
-      s.resultChecked = (stepEffectiveStatus(s) === 'done');
-    }
+    if(s.resultChecked === undefined) s.resultChecked = (stepEffectiveStatus(s) === 'done');
     if(s.resultAchieved === undefined) s.resultAchieved = null;
     if(s.resultEventId === undefined) s.resultEventId = null;
   });
