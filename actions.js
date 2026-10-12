@@ -4,24 +4,19 @@
 ================================================================== */
 
 /* ---------- ПОИСК ---------- */
-function findGoal(goalId){ return goals.find(g => g.id === goalId) || null; }
-function findStep(goalId, stepId){
-  const g = findGoal(goalId);
+function findProject(projectId){ return goals.find(g => g.id === projectId) || null; }
+function findMilestone(projectId, milestoneId){
+  const g = findProject(projectId);
   if(!g) return null;
-  return (g.steps || []).find(s => s.id === stepId) || null;
-}
-function findSubstep(goalId, stepId, substepId){
-  const s = findStep(goalId, stepId);
-  if(!s) return null;
-  return (s.substeps || []).find(ss => ss.id === substepId) || null;
+  return (g.milestones || []).find(m => m.id === milestoneId) || null;
 }
 function findHabit(habitId){ return habits.find(h => h.id === habitId) || null; }
 
 /* ---------- ОПЦИИ ---------- */
-function optionsGoals(){
-  let html = '<option value="">— выбери цель —</option>';
+function optionsProjects(){
+  let html = '<option value="">— выбери проект —</option>';
   goals.forEach(g => {
-    html += `<option value="${g.id}">${escapeHtml(g.text)}</option>`;
+    html += `<option value="${g.id}">${escapeHtml(g.title)}</option>`;
   });
   return html;
 }
@@ -32,31 +27,17 @@ function optionsHabits(){
   });
   return html;
 }
-function optionsSteps(){
-  let html = '<option value="">— выбери шаг —</option>';
+function optionsMilestones(){
+  let html = '<option value="">— выбери веху —</option>';
   goals.forEach(g => {
-    const steps = g.steps || [];
-    if(steps.length === 0) return;
-    html += `<optgroup label="${escapeHtml(g.text)}">`;
-    steps.forEach(s => {
-      html += `<option value="${g.id}/${s.id}">${escapeHtml(s.text)}</option>`;
+    const ms = g.milestones || [];
+    if(ms.length === 0) return;
+    html += `<optgroup label="${escapeHtml(g.title)}">`;
+    ms.forEach(m => {
+      const d = m.date ? ' · ' + m.date : '';
+      html += `<option value="${g.id}/${m.id}">${escapeHtml(m.title)}${d}</option>`;
     });
     html += '</optgroup>';
-  });
-  return html;
-}
-function optionsSubsteps(){
-  let html = '<option value="">— выбери подшаг —</option>';
-  goals.forEach(g => {
-    (g.steps || []).forEach(s => {
-      const subs = s.substeps || [];
-      if(subs.length === 0) return;
-      html += `<optgroup label="${escapeHtml(g.text)} → ${escapeHtml(s.text)}">`;
-      subs.forEach(ss => {
-        html += `<option value="${g.id}/${s.id}/${ss.id}">${escapeHtml(ss.text)}</option>`;
-      });
-      html += '</optgroup>';
-    });
   });
   return html;
 }
@@ -75,26 +56,15 @@ function optionsNoteTargets(excludeKeys){
     html += '<optgroup label="Привычки">' + habitOpts.join('') + '</optgroup>';
   }
 
+  const projOpts = [];
   goals.forEach(g => {
-    const steps = g.steps || [];
-    if(steps.length === 0) return;
-    const stepOpts = [];
-    steps.forEach(s => {
-      const stepKey = 'step/' + g.id + '/' + s.id;
-      if(!excludeKeys.has(stepKey)){
-        stepOpts.push(`<option value="${stepKey}">Шаг: ${escapeHtml(s.text)}</option>`);
-      }
-      (s.substeps || []).forEach(ss => {
-        const subKey = 'substep/' + g.id + '/' + s.id + '/' + ss.id;
-        if(!excludeKeys.has(subKey)){
-          stepOpts.push(`<option value="${subKey}">↳ Подшаг: ${escapeHtml(ss.text)}</option>`);
-        }
-      });
-    });
-    if(stepOpts.length > 0){
-      html += `<optgroup label="🎯 ${escapeHtml(g.text)}">${stepOpts.join('')}</optgroup>`;
-    }
+    const key = 'project/' + g.id;
+    if(excludeKeys.has(key)) return;
+    projOpts.push(`<option value="${key}">${escapeHtml(g.title)}</option>`);
   });
+  if(projOpts.length > 0){
+    html += '<optgroup label="🛤 Проекты">' + projOpts.join('') + '</optgroup>';
+  }
 
   return html;
 }
@@ -106,13 +76,12 @@ function collectDraftNoteKeys(){
     if(a.type !== 'note') return;
     const t = a.data.target;
     if(t.kind === 'habit') set.add('habit/' + t.habitId);
-    else if(t.kind === 'step') set.add('step/' + t.goalId + '/' + t.stepId);
-    else if(t.kind === 'substep') set.add('substep/' + t.goalId + '/' + t.stepId + '/' + t.substepId);
+    else if(t.kind === 'project') set.add('project/' + t.projectId);
   });
   return set;
 }
 
-/* ---------- ПОСТРОЕНИЕ ФОРМЫ ---------- */
+/* ---------- ПОСТРОЕНИЕ ФОРМЫ ПОД ТИП ---------- */
 function buildActionFormHTML(type){
   if(type === 'note'){
     const excluded = collectDraftNoteKeys();
@@ -120,21 +89,6 @@ function buildActionFormHTML(type){
     return `
       <select class="action-select" id="actTarget">${opts}</select>
       <textarea class="action-textarea" id="actText" placeholder="Текст заметки"></textarea>
-    `;
-  }
-  if(type === 'add_step'){
-    return `
-      <select class="action-select" id="actGoal">${optionsGoals()}</select>
-      <input class="action-input" type="text" id="actText" placeholder="Название шага" maxlength="200">
-      <input class="action-input" type="text" id="actResult" placeholder="Результат (что должно получиться)" maxlength="200">
-      <input class="action-input" type="date" id="actDeadline" title="Дедлайн">
-    `;
-  }
-  if(type === 'add_substep'){
-    return `
-      <select class="action-select" id="actStep">${optionsSteps()}</select>
-      <input class="action-input" type="text" id="actText" placeholder="Название подшага" maxlength="200">
-      <input class="action-input" type="date" id="actDeadline">
     `;
   }
   if(type === 'add_habit'){
@@ -149,19 +103,29 @@ function buildActionFormHTML(type){
       </div>
     `;
   }
-  if(type === 'del_step') return `<select class="action-select" id="actStep">${optionsSteps()}</select>`;
-  if(type === 'del_substep') return `<select class="action-select" id="actSubstep">${optionsSubsteps()}</select>`;
-  if(type === 'del_habit') return `<select class="action-select" id="actHabit">${optionsHabits()}</select>`;
-  if(type === 'shift_step_deadline'){
+  if(type === 'del_habit'){
+    return `<select class="action-select" id="actHabit">${optionsHabits()}</select>`;
+  }
+  if(type === 'add_milestone'){
     return `
-      <select class="action-select" id="actStep">${optionsSteps()}</select>
-      <input class="action-input" type="date" id="actDeadline" title="Новая дата">
+      <select class="action-select" id="actProject">${optionsProjects()}</select>
+      <input class="action-input" type="text" id="actText" placeholder="Название вехи" maxlength="200">
+      <input class="action-input" type="date" id="actDate" title="Дата вехи">
     `;
   }
-  if(type === 'shift_substep_deadline'){
+  if(type === 'del_milestone'){
+    return `<select class="action-select" id="actMilestone">${optionsMilestones()}</select>`;
+  }
+  if(type === 'shift_milestone_date'){
     return `
-      <select class="action-select" id="actSubstep">${optionsSubsteps()}</select>
-      <input class="action-input" type="date" id="actDeadline" title="Новая дата">
+      <select class="action-select" id="actMilestone">${optionsMilestones()}</select>
+      <input class="action-input" type="date" id="actDate" title="Новая дата">
+    `;
+  }
+  if(type === 'shift_project_end'){
+    return `
+      <select class="action-select" id="actProject">${optionsProjects()}</select>
+      <input class="action-input" type="date" id="actDate" title="Новый финиш">
     `;
   }
   return '';
@@ -179,33 +143,8 @@ function collectActionData(type){
     const parts = target.split('/');
     data.target = { kind: parts[0] };
     if(parts[0] === 'habit') data.target.habitId = parts[1];
-    if(parts[0] === 'step'){ data.target.goalId = parts[1]; data.target.stepId = parts[2]; }
-    if(parts[0] === 'substep'){
-      data.target.goalId = parts[1];
-      data.target.stepId = parts[2];
-      data.target.substepId = parts[3];
-    }
+    if(parts[0] === 'project') data.target.projectId = parts[1];
     data.text = text;
-  } else if(type === 'add_step'){
-    const goalId = document.getElementById('actGoal')?.value || '';
-    const text = document.getElementById('actText')?.value.trim() || '';
-    const result = document.getElementById('actResult')?.value.trim() || '';
-    const deadline = document.getElementById('actDeadline')?.value || '';
-    if(!goalId){ alert('Выбери цель'); return null; }
-    if(!text){ alert('Напиши название шага'); return null; }
-    if(!result){ alert('Укажи результат шага'); return null; }
-    if(!deadline){ alert('Укажи дедлайн'); return null; }
-    data.goalId = goalId; data.text = text; data.result = result; data.deadline = deadline;
-  } else if(type === 'add_substep'){
-    const val = document.getElementById('actStep')?.value || '';
-    const text = document.getElementById('actText')?.value.trim() || '';
-    const deadline = document.getElementById('actDeadline')?.value || '';
-    if(!val){ alert('Выбери шаг'); return null; }
-    if(!text){ alert('Напиши название подшага'); return null; }
-    if(!deadline){ alert('Укажи дедлайн'); return null; }
-    const [goalId, stepId] = val.split('/');
-    data.goalId = goalId; data.stepId = stepId;
-    data.text = text; data.deadline = deadline;
   } else if(type === 'add_habit'){
     const text = document.getElementById('actText')?.value.trim() || '';
     const target = parseInt(document.getElementById('actTarget')?.value || '1', 10);
@@ -213,35 +152,36 @@ function collectActionData(type){
     if(!text){ alert('Напиши название привычки'); return null; }
     if(!target || target < 1){ alert('Укажи сколько раз'); return null; }
     data.text = text; data.target = target; data.period = period;
-  } else if(type === 'del_step'){
-    const val = document.getElementById('actStep')?.value || '';
-    if(!val){ alert('Выбери шаг'); return null; }
-    const [goalId, stepId] = val.split('/');
-    data.goalId = goalId; data.stepId = stepId;
-  } else if(type === 'del_substep'){
-    const val = document.getElementById('actSubstep')?.value || '';
-    if(!val){ alert('Выбери подшаг'); return null; }
-    const [goalId, stepId, substepId] = val.split('/');
-    data.goalId = goalId; data.stepId = stepId; data.substepId = substepId;
   } else if(type === 'del_habit'){
     const habitId = document.getElementById('actHabit')?.value || '';
     if(!habitId){ alert('Выбери привычку'); return null; }
     data.habitId = habitId;
-  } else if(type === 'shift_step_deadline'){
-    const val = document.getElementById('actStep')?.value || '';
-    const deadline = document.getElementById('actDeadline')?.value || '';
-    if(!val){ alert('Выбери шаг'); return null; }
-    if(!deadline){ alert('Укажи новую дату'); return null; }
-    const [goalId, stepId] = val.split('/');
-    data.goalId = goalId; data.stepId = stepId; data.deadline = deadline;
-  } else if(type === 'shift_substep_deadline'){
-    const val = document.getElementById('actSubstep')?.value || '';
-    const deadline = document.getElementById('actDeadline')?.value || '';
-    if(!val){ alert('Выбери подшаг'); return null; }
-    if(!deadline){ alert('Укажи новую дату'); return null; }
-    const [goalId, stepId, substepId] = val.split('/');
-    data.goalId = goalId; data.stepId = stepId; data.substepId = substepId;
-    data.deadline = deadline;
+  } else if(type === 'add_milestone'){
+    const projectId = document.getElementById('actProject')?.value || '';
+    const text = document.getElementById('actText')?.value.trim() || '';
+    const date = document.getElementById('actDate')?.value || '';
+    if(!projectId){ alert('Выбери проект'); return null; }
+    if(!text){ alert('Напиши название вехи'); return null; }
+    if(!date){ alert('Укажи дату'); return null; }
+    data.projectId = projectId; data.text = text; data.date = date;
+  } else if(type === 'del_milestone'){
+    const val = document.getElementById('actMilestone')?.value || '';
+    if(!val){ alert('Выбери веху'); return null; }
+    const [projectId, milestoneId] = val.split('/');
+    data.projectId = projectId; data.milestoneId = milestoneId;
+  } else if(type === 'shift_milestone_date'){
+    const val = document.getElementById('actMilestone')?.value || '';
+    const date = document.getElementById('actDate')?.value || '';
+    if(!val){ alert('Выбери веху'); return null; }
+    if(!date){ alert('Укажи новую дату'); return null; }
+    const [projectId, milestoneId] = val.split('/');
+    data.projectId = projectId; data.milestoneId = milestoneId; data.date = date;
+  } else if(type === 'shift_project_end'){
+    const projectId = document.getElementById('actProject')?.value || '';
+    const date = document.getElementById('actDate')?.value || '';
+    if(!projectId){ alert('Выбери проект'); return null; }
+    if(!date){ alert('Укажи новую дату'); return null; }
+    data.projectId = projectId; data.date = date;
   }
 
   return data;
@@ -252,52 +192,16 @@ function executeAction(type, data){
   if(type === 'note'){
     let entity = null;
     if(data.target.kind === 'habit') entity = findHabit(data.target.habitId);
-    else if(data.target.kind === 'step') entity = findStep(data.target.goalId, data.target.stepId);
-    else if(data.target.kind === 'substep') entity = findSubstep(data.target.goalId, data.target.stepId, data.target.substepId);
+    else if(data.target.kind === 'project') entity = findProject(data.target.projectId);
     if(!entity) return false;
-    if(!entity.notes) entity.notes = [];
+    if(!Array.isArray(entity.notes)) entity.notes = [];
     entity.notes.push({ id: uid(), text: data.text, date: new Date().toISOString() });
     logAction('note_added', {
       kind: data.target.kind,
-      id: entity.id, name: entity.name || entity.text,
-      goalId: data.target.goalId || null,
-      stepId: data.target.stepId || null
+      id: entity.id,
+      name: entity.name || entity.title || ''
     }, { source: 'analysis', text: data.text });
     store.set('habits', habits);
-    store.set('goals', goals);
-    return true;
-  }
-  if(type === 'add_step'){
-    const g = findGoal(data.goalId);
-    if(!g) return false;
-    if(!Array.isArray(g.steps)) g.steps = [];
-    const step = {
-      id: uid(), text: data.text,
-      result: data.result,
-      resultChecked: false,
-      resultAchieved: null,
-      resultEventId: null,
-      status: 'todo', lastStatus: 'todo',
-      deadline: data.deadline, substeps: []
-    };
-    g.steps.push(step);
-    logAction('step_created', {
-      kind: 'step', id: step.id, name: step.text,
-      goalId: g.id
-    }, { source: 'analysis', deadline: data.deadline, result: data.result });
-    store.set('goals', goals);
-    return true;
-  }
-  if(type === 'add_substep'){
-    const s = findStep(data.goalId, data.stepId);
-    if(!s) return false;
-    if(!Array.isArray(s.substeps)) s.substeps = [];
-    const sub = { id: uid(), text: data.text, status: 'todo', lastStatus: 'todo', deadline: data.deadline };
-    s.substeps.push(sub);
-    logAction('substep_created', {
-      kind: 'substep', id: sub.id, name: sub.text,
-      goalId: data.goalId, stepId: data.stepId
-    }, { source: 'analysis', deadline: data.deadline });
     store.set('goals', goals);
     return true;
   }
@@ -313,32 +217,6 @@ function executeAction(type, data){
     store.set('habits', habits);
     return true;
   }
-  if(type === 'del_step'){
-    const g = findGoal(data.goalId);
-    if(!g) return false;
-    const s = g.steps.find(x => x.id === data.stepId);
-    if(!s) return false;
-    logAction('step_deleted', {
-      kind: 'step', id: s.id, name: s.text,
-      goalId: g.id
-    }, { source: 'analysis' });
-    g.steps = g.steps.filter(x => x.id !== data.stepId);
-    store.set('goals', goals);
-    return true;
-  }
-  if(type === 'del_substep'){
-    const s = findStep(data.goalId, data.stepId);
-    if(!s) return false;
-    const ss = s.substeps.find(x => x.id === data.substepId);
-    if(!ss) return false;
-    logAction('substep_deleted', {
-      kind: 'substep', id: ss.id, name: ss.text,
-      goalId: data.goalId, stepId: data.stepId
-    }, { source: 'analysis' });
-    s.substeps = s.substeps.filter(x => x.id !== data.substepId);
-    store.set('goals', goals);
-    return true;
-  }
   if(type === 'del_habit'){
     const h = findHabit(data.habitId);
     if(!h) return false;
@@ -349,27 +227,56 @@ function executeAction(type, data){
     store.set('habits', habits);
     return true;
   }
-  if(type === 'shift_step_deadline'){
-    const s = findStep(data.goalId, data.stepId);
-    if(!s) return false;
-    const before = s.deadline;
-    s.deadline = data.deadline;
-    logAction('step_deadline_changed', {
-      kind: 'step', id: s.id, name: s.text,
-      goalId: data.goalId
-    }, { source: 'analysis', before, after: data.deadline });
+  if(type === 'add_milestone'){
+    const g = findProject(data.projectId);
+    if(!g) return false;
+    if(!Array.isArray(g.milestones)) g.milestones = [];
+    const ms = { id: uid(), title: data.text, date: data.date, status: 'todo' };
+    g.milestones.push(ms);
+    g.milestones.sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+    logAction('milestone_created', {
+      kind: 'milestone', id: ms.id, name: ms.title,
+      projectId: g.id
+    }, { source: 'analysis', date: data.date });
     store.set('goals', goals);
     return true;
   }
-  if(type === 'shift_substep_deadline'){
-    const ss = findSubstep(data.goalId, data.stepId, data.substepId);
-    if(!ss) return false;
-    const before = ss.deadline;
-    ss.deadline = data.deadline;
-    logAction('substep_deadline_changed', {
-      kind: 'substep', id: ss.id, name: ss.text,
-      goalId: data.goalId, stepId: data.stepId
-    }, { source: 'analysis', before, after: data.deadline });
+  if(type === 'del_milestone'){
+    const g = findProject(data.projectId);
+    if(!g) return false;
+    const ms = (g.milestones || []).find(x => x.id === data.milestoneId);
+    if(!ms) return false;
+    logAction('milestone_deleted', {
+      kind: 'milestone', id: ms.id, name: ms.title,
+      projectId: g.id
+    }, { source: 'analysis' });
+    g.milestones = g.milestones.filter(x => x.id !== data.milestoneId);
+    store.set('goals', goals);
+    return true;
+  }
+  if(type === 'shift_milestone_date'){
+    const g = findProject(data.projectId);
+    if(!g) return false;
+    const ms = (g.milestones || []).find(x => x.id === data.milestoneId);
+    if(!ms) return false;
+    const before = ms.date;
+    ms.date = data.date;
+    g.milestones.sort((a,b) => (a.date || '').localeCompare(b.date || ''));
+    logAction('milestone_date_changed', {
+      kind: 'milestone', id: ms.id, name: ms.title,
+      projectId: g.id
+    }, { source: 'analysis', before, after: data.date });
+    store.set('goals', goals);
+    return true;
+  }
+  if(type === 'shift_project_end'){
+    const g = findProject(data.projectId);
+    if(!g) return false;
+    const before = g.endDate;
+    g.endDate = data.date;
+    logAction('project_end_changed', {
+      kind: 'project', id: g.id, name: g.title
+    }, { source: 'analysis', before, after: data.date });
     store.set('goals', goals);
     return true;
   }
@@ -383,40 +290,35 @@ function describeAction(type, data){
     if(data.target.kind === 'habit'){
       const h = findHabit(data.target.habitId);
       targetName = 'привычке «' + (h ? h.name : '?') + '»';
-    } else if(data.target.kind === 'step'){
-      const s = findStep(data.target.goalId, data.target.stepId);
-      targetName = 'шагу «' + (s ? s.text : '?') + '»';
-    } else if(data.target.kind === 'substep'){
-      const ss = findSubstep(data.target.goalId, data.target.stepId, data.target.substepId);
-      targetName = 'подшагу «' + (ss ? ss.text : '?') + '»';
+    } else if(data.target.kind === 'project'){
+      const g = findProject(data.target.projectId);
+      targetName = 'проекту «' + (g ? g.title : '?') + '»';
     }
     return `Заметка к ${targetName}: ${data.text}`;
   }
-  if(type === 'add_step') return `Добавить шаг «${data.text}» (результат: ${data.result}, дедлайн ${data.deadline})`;
-  if(type === 'add_substep') return `Добавить подшаг «${data.text}» (дедлайн ${data.deadline})`;
   if(type === 'add_habit'){
     const p = data.period === 'day' ? 'день' : 'неделю';
     return `Добавить привычку «${data.text}» — ${data.target} раз в ${p}`;
-  }
-  if(type === 'del_step'){
-    const s = findStep(data.goalId, data.stepId);
-    return `Удалить шаг «${s ? s.text : '?'}»`;
-  }
-  if(type === 'del_substep'){
-    const ss = findSubstep(data.goalId, data.stepId, data.substepId);
-    return `Удалить подшаг «${ss ? ss.text : '?'}»`;
   }
   if(type === 'del_habit'){
     const h = findHabit(data.habitId);
     return `Удалить привычку «${h ? h.name : '?'}»`;
   }
-  if(type === 'shift_step_deadline'){
-    const s = findStep(data.goalId, data.stepId);
-    return `Сдвинуть дедлайн шага «${s ? s.text : '?'}» на ${data.deadline}`;
+  if(type === 'add_milestone'){
+    const g = findProject(data.projectId);
+    return `Добавить веху «${data.text}» к проекту «${g ? g.title : '?'}» (дата ${data.date})`;
   }
-  if(type === 'shift_substep_deadline'){
-    const ss = findSubstep(data.goalId, data.stepId, data.substepId);
-    return `Сдвинуть дедлайн подшага «${ss ? ss.text : '?'}» на ${data.deadline}`;
+  if(type === 'del_milestone'){
+    const ms = findMilestone(data.projectId, data.milestoneId);
+    return `Удалить веху «${ms ? ms.title : '?'}»`;
+  }
+  if(type === 'shift_milestone_date'){
+    const ms = findMilestone(data.projectId, data.milestoneId);
+    return `Сдвинуть дату вехи «${ms ? ms.title : '?'}» на ${data.date}`;
+  }
+  if(type === 'shift_project_end'){
+    const g = findProject(data.projectId);
+    return `Сдвинуть финиш проекта «${g ? g.title : '?'}» на ${data.date}`;
   }
   return 'Действие';
 }
@@ -477,8 +379,7 @@ function confirmAddAction(){
 
 function noteTargetKey(t){
   if(t.kind === 'habit') return 'habit/' + t.habitId;
-  if(t.kind === 'step') return 'step/' + t.goalId + '/' + t.stepId;
-  if(t.kind === 'substep') return 'substep/' + t.goalId + '/' + t.stepId + '/' + t.substepId;
+  if(t.kind === 'project') return 'project/' + t.projectId;
   return '';
 }
 
