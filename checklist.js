@@ -1,6 +1,5 @@
 /* ==================================================================
-   ЧЕКЛИСТ — авто-события привычек + свои «не хочу» + результаты
-   Канбан снесён — соответствующие события больше не генерируются.
+   ЧЕКЛИСТ — авто-события + ручные (want / external / discuss) + результаты
 ================================================================== */
 
 /* ---------- ГЕНЕРАЦИЯ АВТО-СОБЫТИЙ ---------- */
@@ -65,9 +64,6 @@ function addEventIfMissing(source, refId, date, info){
     title: info.title,
     detail: info.detail,
     period: info.period || null,
-    goalId: info.goalId || null,
-    stepId: info.stepId || null,
-    substepId: info.substepId || null,
     crumb: info.crumb || null,
     createdAt: Date.now(),
     status: 'new',
@@ -94,18 +90,32 @@ function switchManualType(type){
   renderChecklist();
 }
 
-/* ---------- РУЧНЫЕ СОБЫТИЯ («не хочу делать») ---------- */
+/* ---------- УНИВЕРСАЛЬНАЯ КНОПКА + ---------- */
 function openManualPicker(){
   if(currentManualType === 'result'){
-    alert('События этого типа создаются автоматически при выполнении шага');
+    alert('События этого типа создаются автоматически при выполнении вехи проекта');
     return;
   }
-  const type = currentManualType;
+  if(currentManualType === 'external'){
+    openExternalPicker();
+    return;
+  }
+  if(currentManualType === 'discuss'){
+    openDiscussPicker();
+    return;
+  }
+  // want
+  openWantPicker();
+}
 
+/* ---------- WANT: НЕ ХОЧУ ДЕЛАТЬ ---------- */
+function openWantPicker(){
   const titleEl = document.getElementById('manualModalTitle');
   const labelEl = document.getElementById('manualTaskLabel');
+  const dateLabel = document.getElementById('manualDateLabel');
   if(titleEl) titleEl.textContent = 'Не хочу делать';
   if(labelEl) labelEl.textContent = 'Что не хочется делать';
+  if(dateLabel) dateLabel.textContent = 'Когда не хочется';
 
   const tasks = [];
 
@@ -121,32 +131,18 @@ function openManualPicker(){
   });
 
   goals.forEach(g => {
-    if(g.done) return;
-    (g.steps || []).forEach(step => {
-      const subs = step.substeps || [];
-      if(subs.length === 0){
-        if(step.status === 'done') return;
-        tasks.push({
-          value: 'step:' + g.id + ':' + step.id,
-          group: 'Шаги',
-          title: step.text,
-          crumb: g.text,
-          refType: 'step',
-          refId: step.id
-        });
-      } else {
-        subs.forEach(ss => {
-          if(ss.status === 'done') return;
-          tasks.push({
-            value: 'substep:' + g.id + ':' + step.id + ':' + ss.id,
-            group: 'Подшаги',
-            title: ss.text,
-            crumb: g.text + ' → ' + step.text,
-            refType: 'substep',
-            refId: step.id + ':' + ss.id
-          });
-        });
-      }
+    const ms = g.milestones || [];
+    if(ms.length === 0) return;
+    ms.forEach(m => {
+      if(m.status === 'done') return;
+      tasks.push({
+        value: 'milestone:' + g.id + ':' + m.id,
+        group: 'Вехи проектов',
+        title: m.title,
+        crumb: g.title,
+        refType: 'milestone',
+        refId: m.id
+      });
     });
   });
 
@@ -166,14 +162,12 @@ function openManualPicker(){
       html += `<optgroup label="${escapeHtml(g)}">`;
       byGroup[g].forEach(t => {
         const label = t.crumb ? `${t.title}  (${t.crumb})` : t.title;
-        const escaped = escapeHtml(label);
-        const crumbEsc = t.crumb ? escapeHtml(t.crumb) : '';
         html += `<option value="${t.value}"
           data-ref-type="${t.refType}"
           data-ref-id="${t.refId}"
           data-title="${escapeHtml(t.title)}"
-          data-crumb="${crumbEsc}"
-        >${escaped}</option>`;
+          data-crumb="${t.crumb ? escapeHtml(t.crumb) : ''}"
+        >${escapeHtml(label)}</option>`;
       });
       html += '</optgroup>';
     });
@@ -246,6 +240,134 @@ function createManualEvent(){
   renderChecklist();
 }
 
+/* ---------- EXTERNAL: ВНЕШНЕЕ СОБЫТИЕ ---------- */
+function openExternalPicker(){
+  const titleInp = document.getElementById('externalTitle');
+  const dateInp = document.getElementById('externalDate');
+  const noteInp = document.getElementById('externalNote');
+  if(titleInp) titleInp.value = '';
+  if(noteInp) noteInp.value = '';
+  if(dateInp){
+    dateInp.value = todayStr();
+    if(dateInp.min !== SYSTEM_START_DATE) dateInp.min = SYSTEM_START_DATE;
+  }
+  document.getElementById('externalOverlay').classList.add('open');
+  if(titleInp) setTimeout(() => titleInp.focus(), 100);
+}
+
+function closeExternalPicker(){
+  document.getElementById('externalOverlay').classList.remove('open');
+}
+
+function createExternalEvent(){
+  const titleInp = document.getElementById('externalTitle');
+  const dateInp = document.getElementById('externalDate');
+  const noteInp = document.getElementById('externalNote');
+  if(!titleInp || !dateInp) return;
+
+  const title = titleInp.value.trim();
+  const date = dateInp.value;
+  const note = noteInp ? noteInp.value.trim() : '';
+
+  if(!title){ alert('Напиши, что случилось'); titleInp.focus(); return; }
+  if(!date){ alert('Укажи дату'); dateInp.focus(); return; }
+  if(date < SYSTEM_START_DATE){ alert('Дата раньше старта системы'); return; }
+
+  checklistEvents.push({
+    id: uid(),
+    date,
+    source: 'external',
+    refType: null,
+    refId: null,
+    title,
+    detail: 'внешнее событие',
+    note: note || null,
+    crumb: null,
+    createdAt: Date.now(),
+    status: 'new',
+    analysisId: null,
+    analysisStartedAt: null,
+    analysisDeadline: null,
+    resolvedAt: null,
+    solution: null,
+    childrenIds: null,
+    mergedIntoId: null
+  });
+  logAction('external_event_created', {
+    kind: 'event', id: uid(), name: title
+  }, { date, note: note || null });
+  store.set('checklistEvents', checklistEvents);
+  closeExternalPicker();
+  renderChecklist();
+}
+
+/* ---------- DISCUSS: ХОЧЕТСЯ ОБСУДИТЬ ---------- */
+function openDiscussPicker(){
+  const titleInp = document.getElementById('discussTitle');
+  const withInp = document.getElementById('discussWith');
+  const dateInp = document.getElementById('discussDate');
+  const noteInp = document.getElementById('discussNote');
+  if(titleInp) titleInp.value = '';
+  if(withInp) withInp.value = '';
+  if(noteInp) noteInp.value = '';
+  if(dateInp){
+    dateInp.value = todayStr();
+    if(dateInp.min !== SYSTEM_START_DATE) dateInp.min = SYSTEM_START_DATE;
+  }
+  document.getElementById('discussOverlay').classList.add('open');
+  if(titleInp) setTimeout(() => titleInp.focus(), 100);
+}
+
+function closeDiscussPicker(){
+  document.getElementById('discussOverlay').classList.remove('open');
+}
+
+function createDiscussEvent(){
+  const titleInp = document.getElementById('discussTitle');
+  const withInp = document.getElementById('discussWith');
+  const dateInp = document.getElementById('discussDate');
+  const noteInp = document.getElementById('discussNote');
+  if(!titleInp || !dateInp) return;
+
+  const title = titleInp.value.trim();
+  const withWhom = withInp ? withInp.value.trim() : '';
+  const date = dateInp.value;
+  const note = noteInp ? noteInp.value.trim() : '';
+
+  if(!title){ alert('Напиши, что обсудить'); titleInp.focus(); return; }
+  if(!date){ alert('Укажи дату'); dateInp.focus(); return; }
+  if(date < SYSTEM_START_DATE){ alert('Дата раньше старта системы'); return; }
+
+  const detail = withWhom ? 'обсудить с ' + withWhom : 'хочется обсудить';
+
+  checklistEvents.push({
+    id: uid(),
+    date,
+    source: 'discuss',
+    refType: null,
+    refId: null,
+    title,
+    detail,
+    note: note || null,
+    crumb: null,
+    createdAt: Date.now(),
+    status: 'new',
+    analysisId: null,
+    analysisStartedAt: null,
+    analysisDeadline: null,
+    resolvedAt: null,
+    solution: null,
+    childrenIds: null,
+    mergedIntoId: null
+  });
+  logAction('discuss_event_created', {
+    kind: 'event', id: uid(), name: title
+  }, { date, withWhom: withWhom || null, note: note || null });
+  store.set('checklistEvents', checklistEvents);
+  closeDiscussPicker();
+  renderChecklist();
+}
+
 /* ---------- РЕНДЕР ---------- */
 function renderChecklist(){
   generateChecklistEvents();
@@ -268,9 +390,7 @@ function renderChecklist(){
     autoList.innerHTML = '';
     const auto = checklistEvents
       .filter(e => e.status !== 'merged'
-        && e.source !== 'manual'
-        && e.source !== 'result'
-        && e.source !== 'kanban'
+        && e.source === 'habit'
         && isAfterStart(e.date))
       .sort((a,b) => {
         const aDone = a.status === 'resolved' ? 1 : 0;
@@ -304,12 +424,28 @@ function renderChecklist(){
       );
       emptyIcon = '💭';
       emptyMsg = 'Что-то не хочется делать? Жми +';
+    } else if(currentManualType === 'external'){
+      items = checklistEvents.filter(e =>
+        e.status !== 'merged' &&
+        e.source === 'external' &&
+        isAfterStart(e.date)
+      );
+      emptyIcon = '🌍';
+      emptyMsg = 'Что-то произошло извне? Жми +';
+    } else if(currentManualType === 'discuss'){
+      items = checklistEvents.filter(e =>
+        e.status !== 'merged' &&
+        e.source === 'discuss' &&
+        isAfterStart(e.date)
+      );
+      emptyIcon = '💬';
+      emptyMsg = 'Есть что обсудить? Жми +';
     } else {
       items = checklistEvents.filter(e =>
         e.status !== 'merged' && e.source === 'result' && isAfterStart(e.date)
       );
       emptyIcon = '🎯';
-      emptyMsg = 'События появятся, когда завершишь шаг и ответишь на вопрос про результат';
+      emptyMsg = 'События появятся, когда завершишь веху и ответишь про результат';
     }
 
     items.sort((a,b) => {
@@ -336,6 +472,8 @@ function buildEventCard(e){
   const el = document.createElement('div');
   el.className = 'checklist-event';
   if(e.source === 'manual') el.classList.add('manual');
+  if(e.source === 'external') el.classList.add('external');
+  if(e.source === 'discuss') el.classList.add('discuss');
   if(e.source === 'result') el.classList.add('result-event');
   if(e.source === 'result' && e.achieved) el.classList.add('result-achieved');
   if(e.source === 'result' && !e.achieved) el.classList.add('result-failed');
@@ -354,9 +492,21 @@ function buildEventCard(e){
     sourceLabel = e.achieved ? 'Результат ✓' : 'Результат ✗';
     sourceIcon = e.achieved ? '✓' : '✗';
     titleHtml = escapeHtml(e.title);
+  } else if(e.source === 'external'){
+    sourceLabel = 'Внешнее';
+    sourceIcon = '🌍';
+    titleHtml = escapeHtml(e.title);
+  } else if(e.source === 'discuss'){
+    sourceLabel = 'Обсудить';
+    sourceIcon = '💬';
+    titleHtml = escapeHtml(e.title);
+  } else if(e.source === 'habit'){
+    sourceLabel = 'ЗОЖ';
+    sourceIcon = '🎯';
+    titleHtml = escapeHtml(e.title);
   } else {
-    sourceLabel = e.source === 'habit' ? 'ЗОЖ' : 'Своё';
-    sourceIcon = e.source === 'habit' ? '🎯' : '💭';
+    sourceLabel = 'Своё';
+    sourceIcon = '💭';
     titleHtml = escapeHtml(e.title);
   }
 
@@ -373,6 +523,8 @@ function buildEventCard(e){
 
   const crumbHtml = e.crumb && e.source !== 'merged'
     ? `<div class="event-crumb">${escapeHtml(e.crumb)}</div>` : '';
+  const noteHtml = e.note
+    ? `<div class="event-note">${escapeHtml(e.note)}</div>` : '';
   const solutionHtml = e.solution
     ? `<div class="event-solution">Решение: ${escapeHtml(e.solution)}</div>` : '';
 
@@ -380,8 +532,8 @@ function buildEventCard(e){
   if(e.source === 'merged'){
     const kids = getMergedChildren(e);
     childrenHtml = `<div class="event-children">${kids.map(k => {
-      const icon = k.source === 'habit' ? '🎯' : (k.source === 'result' ? '✓' : '💭');
-      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'result' ? 'Результат' : 'Своё');
+      const icon = k.source === 'habit' ? '🎯' : (k.source === 'result' ? '✓' : (k.source === 'external' ? '🌍' : (k.source === 'discuss' ? '💬' : '💭')));
+      const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'result' ? 'Результат' : (k.source === 'external' ? 'Внешнее' : (k.source === 'discuss' ? 'Обсудить' : 'Своё')));
       return `<div class="event-child"><span class="event-child-icon">${icon}</span><span class="event-child-label">${label}</span><span class="event-child-title">${escapeHtml(k.title)}</span></div>`;
     }).join('')}</div>`;
   }
@@ -395,6 +547,7 @@ function buildEventCard(e){
     ${crumbHtml}
     ${childrenHtml}
     ${e.source !== 'merged' ? `<div class="event-detail">${escapeHtml(e.detail)}</div>` : ''}
+    ${noteHtml}
     ${solutionHtml}
     <div class="event-foot">${actionHtml}</div>
   `;
