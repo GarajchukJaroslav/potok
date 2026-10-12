@@ -1,7 +1,7 @@
 /* ==================================================================
    SERVICE WORKER — офлайн-кэш + заготовка под push
 ================================================================== */
-const CACHE_NAME = 'potok-v8.1';
+const CACHE_NAME = 'potok-v8.2';
 const ASSETS = [
   './',
   './index.html',
@@ -10,7 +10,6 @@ const ASSETS = [
   './core.js',
   './goals.js',
   './routine.js',
-  './kanban.js',
   './checklist.js',
   './block.js',
   './actions.js',
