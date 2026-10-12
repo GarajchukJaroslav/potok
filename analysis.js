@@ -492,16 +492,19 @@ function saveAnalysis(){
 
   const isAchievedResult = e.source === 'result' && e.achieved;
 
+  // Проверка просрочки таймера — но только если пользователь НЕ скипнул блок
   if(!isAchievedResult && e.analysisDeadline && Date.now() > e.analysisDeadline){
-    if(typeof triggerBlock === 'function') triggerBlock('analysis_timeout', [e.id]);
-    return;
+    const skipped = store.get('skippedBlocks', []);
+    if(!skipped.includes(e.id)){
+      if(typeof triggerBlock === 'function') triggerBlock('analysis_timeout', [e.id]);
+      return;
+    }
   }
 
   const draft = e.draftActions || [];
   const isExternal = e.source === 'external';
   const isDiscuss = e.source === 'discuss';
   const isLightEvent = isExternal || isDiscuss;
-  // для external/discuss действия опциональны, для остальных обязательны
   if(draft.length === 0 && !isAchievedResult && !isLightEvent){
     alert('Добавь хотя бы одно действие');
     return;
