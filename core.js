@@ -1,5 +1,6 @@
 /* ==================================================================
    STORE + UTILS + ГЛОБАЛЬНЫЙ STATE + ЖУРНАЛ
+   Цели → Проекты (точка А → вехи → точка B)
 ================================================================== */
 
 const store = {
@@ -79,33 +80,12 @@ function deadlineInfo(dateStr){
   return { text, diff, level };
 }
 
-function deadlineTime(dl){
-  if(!dl) return Infinity;
-  const d = new Date(dl + 'T12:00:00');
-  return isNaN(d) ? Infinity : d.getTime();
-}
-
-function stepEffectiveStatus(step){
-  const subs = step.substeps || [];
-  if(subs.length === 0) return step.status || 'todo';
-  const statuses = subs.map(s => s.status || 'todo');
-  if(statuses.every(s => s === 'done')) return 'done';
-  if(statuses.some(s => s === 'done' || s === 'doing')) return 'doing';
-  return 'todo';
-}
-
 function fmtEventDate(dateStr){
   const d = new Date(dateStr + 'T12:00:00');
   return d.toLocaleDateString('ru-RU', { day:'numeric', month:'long' });
 }
 
 /* ============ ЖУРНАЛ ============ */
-/*
-   Append-only лог всех структурных изменений в системе.
-   Правило: логируем только то, что НЕ имеет собственной отметки
-   в UI (галочки, отметки привычек — сами по себе фиксация).
-*/
-
 function logAction(type, entity, extra){
   const log = store.get('actionLog', []);
   log.push({
@@ -128,7 +108,7 @@ function getActionLog(){
 let habits  = store.get('habits', []);
 let thoughts = store.get('thoughts', []);
 let rules   = store.get('rules', []);
-let goals   = store.get('goals', []);
+let goals   = store.get('goals', []);   // проекты (оставляем имя переменной)
 let checklistEvents = store.get('checklistEvents', []);
 let systemBlock = store.get('systemBlock', { active:false, reason:null, blockedAt:null, events:[], resolution:null });
 let currentManualType = store.get('manualCurrentType', 'want');
@@ -137,6 +117,7 @@ let currentManualType = store.get('manualCurrentType', 'want');
 habits.forEach(h => {
   if(!h.log) h.log = {};
   if(!h.createdAt) h.createdAt = todayStr();
+  if(!Array.isArray(h.notes)) h.notes = [];
   if(h.period === 'day' && h.target > 1){
     if(!h.slots) h.slots = {};
     Object.keys(h.log).forEach(d => {
@@ -150,25 +131,37 @@ habits.forEach(h => {
   }
 });
 
+// goals: старая структура (steps/substeps/result) → новая (milestones)
 goals.forEach(g => {
-  if(g.deadline === undefined) g.deadline = null;
-  if(!Array.isArray(g.steps)) g.steps = [];
-  g.steps.forEach(s => {
-    if(s.deadline === undefined) s.deadline = null;
-    // канбан снесён — 'doing' больше не существует
-    if(s.status === 'doing') s.status = 'todo';
-    if(s.lastStatus === 'doing') s.lastStatus = 'todo';
-    if(s.status === undefined) s.status = s.done ? 'done' : 'todo';
-    if(!Array.isArray(s.substeps)) s.substeps = [];
-    s.substeps.forEach(ss => {
-      if(ss.deadline === undefined) ss.deadline = null;
-      if(ss.status === 'doing') ss.status = 'todo';
-      if(ss.status === undefined) ss.status = 'todo';
-    });
-    if(s.result === undefined) s.result = '';
-    if(s.resultChecked === undefined) s.resultChecked = (stepEffectiveStatus(s) === 'done');
-    if(s.resultAchieved === undefined) s.resultAchieved = null;
-    if(s.resultEventId === undefined) s.resultEventId = null;
+  if(g.pointA === undefined) g.pointA = '';
+  if(g.startDate === undefined){
+    g.startDate = g.date ? g.date.slice(0,10) : todayStr();
+  }
+  if(g.endDate === undefined){
+    g.endDate = g.deadline || null;
+  }
+  if(g.done === undefined) g.done = false;
+  if(!Array.isArray(g.notes)) g.notes = [];
+
+  // миграция steps → milestones
+  if(!Array.isArray(g.milestones)){
+    const steps = g.steps || [];
+    g.milestones = steps.map(s => ({
+      id: s.id || uid(),
+      title: s.text || '',
+      date: s.deadline || null,
+      status: s.status === 'done' ? 'done' : (s.status === 'doing' ? 'doing' : 'todo')
+    }));
+  }
+  // старые поля чистим, чтобы не путались
+  delete g.steps;
+  delete g.deadline;
+
+  // у milestones проверим поля
+  g.milestones.forEach(m => {
+    if(m.status === undefined) m.status = 'todo';
+    if(m.date === undefined) m.date = null;
+    if(m.title === undefined) m.title = '';
   });
 });
 
@@ -263,6 +256,26 @@ function refreshNumbers(){
     if(e.thought) thoughtNums[e.thought.id] = num;
     e.rules.forEach(r => { ruleNums[r.id] = num; });
   });
+}
+
+/* ============ ПРОЕКТ: РАСЧЁТЫ ============ */
+function projectProgress(g){
+  const ms = g.milestones || [];
+  const done = ms.filter(m => m.status === 'done').length;
+  return { done, total: ms.length };
+}
+
+/* Позиция точки на таймлайне (0-100%) по дате */
+function milestonePosition(g, m){
+  if(!g.startDate || !g.endDate || !m.date) return null;
+  const s = new Date(g.startDate + 'T12:00:00').getTime();
+  const e = new Date(g.endDate + 'T12:00:00').getTime();
+  const d = new Date(m.date + 'T12:00:00').getTime();
+  if(isNaN(s) || isNaN(e) || isNaN(d) || e <= s) return null;
+  let p = ((d - s) / (e - s)) * 100;
+  if(p < 0) p = 0;
+  if(p > 100) p = 100;
+  return p;
 }
 
 /* ============ ТАЙМЕРЫ ============ */
