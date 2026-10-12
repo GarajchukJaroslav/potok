@@ -20,9 +20,7 @@
   <!-- ЭКРАН 1: ПРОЕКТЫ -->
   <section class="screen" data-view="goals">
     <div class="screen-inner">
-      <div class="page-title no-back">
-        🛤 Проекты
-      </div>
+      <div class="page-title no-back">Проекты</div>
 
       <div class="projects-bar" id="projectsBar">
         <input id="projectTitle" placeholder="Куда идём (точка B)..." maxlength="200">
@@ -43,9 +41,7 @@
   <!-- ЭКРАН 2: РУТИНА / ЗОЖ -->
   <section class="screen" data-view="routine">
     <div class="screen-inner">
-      <div class="page-title">
-        💪 Рутина / ЗОЖ
-      </div>
+      <div class="page-title">💪 Рутина / ЗОЖ</div>
       <div class="card">
         <div class="card-head">
           <div class="card-icon p1">🎯</div>
@@ -75,9 +71,7 @@
   <!-- ЭКРАН 3: ЧЕКЛИСТ -->
   <section class="screen" data-view="checklist">
     <div class="screen-inner">
-      <div class="page-title">
-        ✅ Чеклист
-      </div>
+      <div class="page-title">✅ Чеклист</div>
       <div class="checklist-cols">
         <div class="checklist-main">
           <div class="checklist-section-title">События системы</div>
@@ -87,6 +81,8 @@
           <div class="side-head">
             <select class="side-select" id="sideSelect" onchange="switchManualType(this.value)">
               <option value="want">Не хочу делать</option>
+              <option value="external">Внешнее событие</option>
+              <option value="discuss">Хочется обсудить</option>
               <option value="result">Анализ результатов</option>
             </select>
             <button class="manual-add-btn" id="sideAddBtn" onclick="openManualPicker()" title="Добавить">+</button>
@@ -102,9 +98,7 @@
   <!-- ЭКРАН 4: АНАЛИЗ -->
   <section class="screen" data-view="analysis">
     <div class="screen-inner">
-      <div class="page-title">
-        🔍 Анализ → Действия
-      </div>
+      <div class="page-title">🔍 Анализ → Действия</div>
       <div id="analysisHome" class="analysis-home"></div>
       <div id="analysisFocus" class="analysis-focus" style="display:none;"></div>
     </div>
@@ -140,7 +134,7 @@
   </div>
 </div>
 
-<!-- МОДАЛКА РУЧНЫХ СОБЫТИЙ -->
+<!-- МОДАЛКА: НЕ ХОЧУ ДЕЛАТЬ -->
 <div class="manual-overlay" id="manualOverlay" onclick="if(event.target===this) closeManualPicker()">
   <div class="manual-modal">
     <div class="manual-modal-head">
@@ -152,12 +146,73 @@
       <select class="manual-select" id="manualTaskSelect"></select>
     </div>
     <div class="manual-field">
-      <label class="manual-label">Когда не хочется</label>
+      <label class="manual-label" id="manualDateLabel">Когда не хочется</label>
       <input class="manual-date" type="date" id="manualDate">
     </div>
     <div class="manual-actions">
       <button class="manual-btn" onclick="closeManualPicker()">Отмена</button>
       <button class="manual-btn accent" onclick="createManualEvent()">Создать событие</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: ВНЕШНЕЕ СОБЫТИЕ -->
+<div class="manual-overlay" id="externalOverlay" onclick="if(event.target===this) closeExternalPicker()">
+  <div class="manual-modal">
+    <div class="manual-modal-head">
+      <div class="manual-modal-title">Внешнее событие</div>
+      <button class="modal-close" onclick="closeExternalPicker()">✕</button>
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Что случилось</label>
+      <input class="manual-date" type="text" id="externalTitle"
+        placeholder="Ссора с близким / Получил оффер / Заболел..." maxlength="200">
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Дата</label>
+      <input class="manual-date" type="date" id="externalDate">
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Как повлияло (опционально)</label>
+      <textarea class="manual-textarea" id="externalNote"
+        placeholder="Что изменилось в состоянии, поведении..." maxlength="1000"></textarea>
+    </div>
+    <div class="manual-actions">
+      <button class="manual-btn" onclick="closeExternalPicker()">Отмена</button>
+      <button class="manual-btn accent" onclick="createExternalEvent()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: ХОЧЕТСЯ ОБСУДИТЬ -->
+<div class="manual-overlay" id="discussOverlay" onclick="if(event.target===this) closeDiscussPicker()">
+  <div class="manual-modal">
+    <div class="manual-modal-head">
+      <div class="manual-modal-title">Хочется обсудить</div>
+      <button class="modal-close" onclick="closeDiscussPicker()">✕</button>
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Что обсудить</label>
+      <input class="manual-date" type="text" id="discussTitle"
+        placeholder="Тема разговора..." maxlength="200">
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">С кем (опционально)</label>
+      <input class="manual-date" type="text" id="discussWith"
+        placeholder="Имя / ментор / сам с собой" maxlength="100">
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Когда (опционально)</label>
+      <input class="manual-date" type="date" id="discussDate">
+    </div>
+    <div class="manual-field">
+      <label class="manual-label">Контекст (опционально)</label>
+      <textarea class="manual-textarea" id="discussNote"
+        placeholder="Что важно помнить / с чего начать..." maxlength="1000"></textarea>
+    </div>
+    <div class="manual-actions">
+      <button class="manual-btn" onclick="closeDiscussPicker()">Отмена</button>
+      <button class="manual-btn accent" onclick="createDiscussEvent()">Создать</button>
     </div>
   </div>
 </div>
