@@ -173,9 +173,13 @@
       <label class="manual-label">Тип действия</label>
       <select class="action-select" id="pickerActionType" onchange="onPickerTypeChange(this.value)">
         <option value="">— выбери тип —</option>
-        <option value="note">📝 Добавить заметку к шагу / привычке</option>
+        <option value="note">📝 Добавить заметку к проекту / привычке</option>
         <option value="add_habit">➕ Добавить привычку</option>
         <option value="del_habit">🗑 Удалить привычку</option>
+        <option value="add_milestone">➕ Добавить веху к проекту</option>
+        <option value="del_milestone">🗑 Удалить веху</option>
+        <option value="shift_milestone_date">📅 Сдвинуть дату вехи</option>
+        <option value="shift_project_end">📅 Сдвинуть финиш проекта</option>
       </select>
     </div>
     <div class="manual-field">
