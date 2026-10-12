@@ -3330,3 +3330,73 @@ body::after{
   .ms-date{ width: 100px; font-size: 10.5px; padding: 2px 4px; }
   .ms-add-date{ width: 100px; font-size: 10.5px; }
 }
+
+/* ============ НОВЫЕ ТИПЫ СОБЫТИЙ ============ */
+.checklist-event.external{
+  background: linear-gradient(135deg, rgba(124,92,255,0.06), rgba(0,217,255,0.03));
+  border-color: rgba(124,92,255,0.25);
+}
+.checklist-event.discuss{
+  background: linear-gradient(135deg, rgba(0,217,255,0.06), rgba(124,92,255,0.03));
+  border-color: rgba(0,217,255,0.3);
+}
+
+.event-source.external{
+  background: rgba(124,92,255,0.15);
+  border: 1px solid rgba(124,92,255,0.4);
+  color: #b8aaff;
+}
+.event-source.discuss{
+  background: linear-gradient(135deg, rgba(0,217,255,0.2), rgba(124,92,255,0.15));
+  border: 1px solid rgba(0,217,255,0.45);
+  color: #a0e8ff;
+}
+
+/* origin в анализе */
+.origin-source.external{
+  background: rgba(124,92,255,0.15);
+  border: 1px solid rgba(124,92,255,0.35);
+  color: #b8aaff;
+}
+.origin-source.discuss{
+  background: linear-gradient(135deg, rgba(0,217,255,0.2), rgba(124,92,255,0.15));
+  border: 1px solid rgba(0,217,255,0.4);
+  color: #a0e8ff;
+}
+
+/* заметка внутри карточки события */
+.event-note{
+  margin-top: 6px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.05);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* textarea в модалках ручного создания */
+.manual-textarea{
+  width: 100%;
+  min-height: 70px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s;
+  resize: vertical;
+  line-height: 1.5;
+}
+.manual-textarea:focus{
+  border-color: rgba(255,159,77,0.5);
+  box-shadow: 0 0 0 3px rgba(255,159,77,0.1);
+  background: rgba(0,0,0,0.55);
+}
+.manual-textarea::placeholder{ color: var(--muted); }
