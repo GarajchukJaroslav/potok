@@ -47,9 +47,9 @@ function init(){
   currentIndex = startIdx >= 0 ? startIdx : 0;
   applyFlowTransform();
 
-  const goalInput = document.getElementById('goalInput');
-  if(goalInput) goalInput.addEventListener('keydown', e => {
-    if(e.key === 'Enter') addGoal();
+  const projectTitle = document.getElementById('projectTitle');
+  if(projectTitle) projectTitle.addEventListener('keydown', e => {
+    if(e.key === 'Enter') addProject();
   });
 
   const habitInput = document.getElementById('habitInput');
@@ -99,10 +99,6 @@ function init(){
   }, 15000);
 
   if(typeof checkSystemBlock === 'function') checkSystemBlock();
-
-  if(typeof checkPendingResultChecks === 'function'){
-    setTimeout(checkPendingResultChecks, 1000);
-  }
 
   /* ============ PWA ============ */
   if('serviceWorker' in navigator){
