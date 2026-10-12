@@ -1,7 +1,7 @@
 /* ==================================================================
    БЛОК СИСТЕМЫ — 3 причины:
-   1) 24ч без реакции
-   2) Просрочен таймер анализа
+   1) 24ч без реакции (кроме external/discuss/achieved-result)
+   2) Просрочен таймер анализа (кроме external/discuss/achieved-result)
    3) Систематический провал ≥3 раз/месяц
    Кнопка «Скипнуть» — событие уходит в skipped, больше не блокирует.
 ================================================================== */
@@ -26,6 +26,8 @@ function checkSystemBlock(){
   for(const e of active){
     if(e.status !== 'new') continue;
     if(e.source === 'result' && e.achieved) continue;
+    if(e.source === 'external') continue;
+    if(e.source === 'discuss') continue;
     if((now - e.createdAt) > EVENT_TIMEOUT_MS){
       triggerBlock('timeout_24h', [e.id]);
       return;
@@ -36,6 +38,8 @@ function checkSystemBlock(){
   for(const e of active){
     if(e.status !== 'in_progress') continue;
     if(e.source === 'result' && e.achieved) continue;
+    if(e.source === 'external') continue;
+    if(e.source === 'discuss') continue;
     if(e.analysisDeadline && now > e.analysisDeadline){
       triggerBlock('analysis_timeout', [e.id]);
       return;
@@ -157,8 +161,8 @@ function renderSystemBlock(force){
       title = `${kids.length} ${plural(kids.length,'событие','события','событий')}`;
       detailHtml = '';
       childrenHtml = `<div class="block-event-children">${kids.map(k => {
-        const icon = k.source === 'habit' ? '🎯' : (k.source === 'result' ? '✓' : '💭');
-        const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'result' ? 'Результат' : 'Своё');
+        const icon = k.source === 'habit' ? '🎯' : (k.source === 'result' ? '✓' : (k.source === 'external' ? '🌍' : (k.source === 'discuss' ? '💬' : '💭')));
+        const label = k.source === 'habit' ? 'ЗОЖ' : (k.source === 'result' ? 'Результат' : (k.source === 'external' ? 'Внешнее' : (k.source === 'discuss' ? 'Обсудить' : 'Своё')));
         return `<div class="block-event-child"><span>${icon}</span><span class="block-event-child-label">${label}</span><span class="block-event-child-title">${escapeHtml(k.title)}</span></div>`;
       }).join('')}</div>`;
     } else if(e.source === 'habit'){
@@ -167,6 +171,14 @@ function renderSystemBlock(force){
       detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
     } else if(e.source === 'result'){
       src = e.achieved ? '✓ Результат' : '✗ Результат';
+      title = e.title;
+      detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
+    } else if(e.source === 'external'){
+      src = '🌍 Внешнее';
+      title = e.title;
+      detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
+    } else if(e.source === 'discuss'){
+      src = '💬 Обсудить';
       title = e.title;
       detailHtml = `<div class="block-event-detail">${escapeHtml(e.detail)}</div>`;
     } else if(e.source === 'manual'){
