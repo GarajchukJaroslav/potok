@@ -75,9 +75,10 @@ function updateTimerDisplay(el){
 /* ---------- ХЕЛПЕР ---------- */
 function sourceMeta(source, manualType){
   if(source === 'habit')  return { icon:'🎯', label:'ЗОЖ',       cls:'habit' };
-  if(source === 'kanban') return { icon:'📋', label:'Канбан',    cls:'kanban' };
   if(source === 'merged') return { icon:'🔗', label:'Объединено', cls:'merged' };
   if(source === 'result') return { icon:'🎯', label:'Результат', cls:'result' };
+  if(source === 'external') return { icon:'🌍', label:'Внешнее', cls:'external' };
+  if(source === 'discuss') return { icon:'💬', label:'Обсудить', cls:'discuss' };
   if(source === 'manual' && manualType === 'result')
                           return { icon:'🎯', label:'Результат', cls:'result' };
   if(source === 'manual') return { icon:'💭', label:'Своё',       cls:'manual' };
@@ -113,6 +114,9 @@ function renderEventOrigin(event){
   const crumbHtml = event.crumb
     ? `<div class="origin-crumb">${escapeHtml(event.crumb)}</div>`
     : '';
+  const noteHtml = event.note
+    ? `<div class="origin-crumb">${escapeHtml(event.note)}</div>`
+    : '';
   return `
     <div class="origin-row">
       <span class="origin-source ${meta.cls}">${meta.icon} ${meta.label}</span>
@@ -120,6 +124,7 @@ function renderEventOrigin(event){
     </div>
     <div class="origin-title">${escapeHtml(event.title || '(без названия)')}</div>
     ${crumbHtml}
+    ${noteHtml}
   `;
 }
 
@@ -255,6 +260,8 @@ function renderAnalysisFocus(e){
   const isManualResult = e.source === 'manual' && e.manualType === 'result';
   const isResultEvent = e.source === 'result';
   const isAchievedResult = isResultEvent && e.achieved;
+  const isExternal = e.source === 'external';
+  const isDiscuss = e.source === 'discuss';
 
   let headerHtml = '';
 
@@ -278,6 +285,9 @@ function renderAnalysisFocus(e){
     const achievedBadge = isResultEvent
       ? (e.achieved ? ' <span class="achieved-badge success">✓ достигнут</span>' : ' <span class="achieved-badge fail">✗ не достигнут</span>')
       : '';
+    const noteHtml = e.note
+      ? `<div class="focus-event-detail" style="font-style:italic;">${escapeHtml(e.note)}</div>`
+      : '';
     headerHtml = `
       <div class="focus-event-meta">
         <span class="event-date">${fmtEventDate(e.date)}</span>
@@ -287,10 +297,13 @@ function renderAnalysisFocus(e){
       <div class="focus-event-title">${escapeHtml(e.title)}</div>
       ${crumb}
       <div class="focus-event-detail">${escapeHtml(e.detail)}</div>
+      ${noteHtml}
     `;
   }
 
-  const canDelete = !isResultEvent && (isManualWant || (isMerged && isAllManualDeletableMerge(e)));
+  const canDelete = !isResultEvent && (isExternal || isDiscuss ||
+    (e.source === 'manual' && e.manualType === 'want') ||
+    (isMerged && isAllManualDeletableMerge(e)));
 
   let placeholder;
   if(isAchievedResult){
@@ -299,6 +312,10 @@ function renderAnalysisFocus(e){
     placeholder = 'Что ты ожидал? Что получилось? Где расхождение?';
   } else if(isManualResult){
     placeholder = 'Что ты ожидал? Что получилось? Где расхождение?';
+  } else if(isExternal){
+    placeholder = 'Как это на тебя повлияло? Что сдвинуло? Что зацепило?';
+  } else if(isDiscuss){
+    placeholder = 'О чём именно хочется поговорить? Что важно прояснить?';
   } else {
     placeholder = 'Почему это произошло? Что общего между этими событиями?';
   }
@@ -315,7 +332,7 @@ function renderAnalysisFocus(e){
 
       <div class="focus-body">
         <div class="focus-field">
-          <label class="focus-label">Анализ проблемы</label>
+          <label class="focus-label">${isExternal ? 'Разбор' : (isDiscuss ? 'Что хочется прояснить' : 'Анализ проблемы')}</label>
           <textarea class="focus-textarea" id="focusNote" placeholder="${placeholder}"></textarea>
         </div>
 
@@ -374,7 +391,7 @@ function renderAnalysisHome(){
           ? `resumeAnalysisFromEvent('${e.id}')`
           : `startAnalysisFromEvent('${e.id}')`;
         const checked = selectedForMerge.has(e.id) ? 'checked' : '';
-        const canSelect = e.status === 'new' && e.source !== 'result';
+        const canSelect = e.status === 'new' && e.source !== 'result' && e.source !== 'external' && e.source !== 'discuss';
 
         const title = e.source === 'merged'
           ? `${getMergedChildren(e).length} ${plural(getMergedChildren(e).length,'событие','события','событий')}`
@@ -468,7 +485,7 @@ function saveAnalysis(){
   const noteEl = document.getElementById('focusNote');
   if(!noteEl) return;
   const note = noteEl.value.trim();
-  if(!note){ alert('Напиши анализ проблемы'); noteEl.focus(); return; }
+  if(!note){ alert('Напиши анализ'); noteEl.focus(); return; }
 
   const e = checklistEvents.find(x => x.id === activeAnalysisEventId);
   if(!e) return;
@@ -481,7 +498,11 @@ function saveAnalysis(){
   }
 
   const draft = e.draftActions || [];
-  if(draft.length === 0 && !isAchievedResult){
+  const isExternal = e.source === 'external';
+  const isDiscuss = e.source === 'discuss';
+  const isLightEvent = isExternal || isDiscuss;
+  // для external/discuss действия опциональны, для остальных обязательны
+  if(draft.length === 0 && !isAchievedResult && !isLightEvent){
     alert('Добавь хотя бы одно действие');
     return;
   }
@@ -507,7 +528,10 @@ function saveAnalysis(){
 
   const ruleText = actionLines.length > 0
     ? actionLines.join('\n')
-    : (isAchievedResult ? 'Результат достигнут — без структурных изменений' : 'Без действий');
+    : (isAchievedResult ? 'Результат достигнут — без структурных изменений'
+       : isExternal ? 'Внешнее событие разобрано'
+       : isDiscuss ? 'Обсуждено'
+       : 'Без действий');
 
   const rule = {
     id: uid(),
@@ -552,8 +576,11 @@ function deleteManualAnalysis(){
   if(!e) return;
 
   const isResultEvent = e.source === 'result';
+  const isExternal = e.source === 'external';
+  const isDiscuss = e.source === 'discuss';
   const canDelete = !isResultEvent &&
-    ((e.source === 'manual' && e.manualType === 'want') ||
+    (isExternal || isDiscuss ||
+     (e.source === 'manual' && e.manualType === 'want') ||
      (e.source === 'merged' && isAllManualDeletableMerge(e)));
 
   if(!canDelete) return;
