@@ -6,6 +6,39 @@
 function generateChecklistEvents(){
   const before = checklistEvents.length;
 
+  /* ---------- ЧИСТКА: привычка выполнена задним числом ----------
+     Если событие в статусе 'new' (не тронуто, не разобрано)
+     и привычка за этот период УЖЕ выполнена — удаляем событие.
+     Если статус 'in_progress' или 'resolved' — не трогаем. */
+  const toRemove = [];
+  checklistEvents.forEach(e => {
+    if(e.source !== 'habit') return;
+    if(e.status !== 'new') return;
+    if(!isAfterStart(e.date)) return;
+    const h = habits.find(x => x.id === e.refId);
+    if(!h) return;
+
+    if(h.period === 'day'){
+      const done = (h.log[e.date] || 0);
+      if(done >= h.target) toRemove.push(e.id);
+    } else if(h.period === 'week'){
+      const weekDays = getWeekDaysFrom(e.date);
+      const sum = weekDays.reduce((s,k) => s + ((h.log||{})[k] || 0), 0);
+      if(sum >= h.target) toRemove.push(e.id);
+    }
+  });
+  if(toRemove.length > 0){
+    toRemove.forEach(id => {
+      const ev = checklistEvents.find(x => x.id === id);
+      logAction('event_auto_removed', {
+        kind: 'event', id, name: ev ? ev.title : ''
+      }, { reason: 'habit_completed_after_event_created' });
+    });
+    checklistEvents = checklistEvents.filter(e => !toRemove.includes(e.id));
+    store.set('checklistEvents', checklistEvents);
+  }
+
+  /* ---------- ГЕНЕРАЦИЯ: новые события по провалам ---------- */
   habits.forEach(h => {
     if(h.period === 'day'){
       const y = new Date(); y.setDate(y.getDate() - 1);
@@ -43,7 +76,7 @@ function generateChecklistEvents(){
     }
   });
 
-  if(checklistEvents.length !== before){
+  if(checklistEvents.length !== before || toRemove.length > 0){
     store.set('checklistEvents', checklistEvents);
   }
 }
