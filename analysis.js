@@ -502,16 +502,9 @@ function saveAnalysis(){
   }
 
   const draft = e.draftActions || [];
-  const isExternal = e.source === 'external';
-  const isDiscuss = e.source === 'discuss';
-  const isLightEvent = isExternal || isDiscuss;
-  if(draft.length === 0 && !isAchievedResult && !isLightEvent){
-    alert('Добавь хотя бы одно действие');
-    return;
-  }
-
   const actionLines = draft.map(a => a.description);
 
+  // Выполняем действия (если они есть)
   for(const a of draft){
     const ok = executeAction(a.type, a.data);
     if(!ok){
@@ -531,10 +524,7 @@ function saveAnalysis(){
 
   const ruleText = actionLines.length > 0
     ? actionLines.join('\n')
-    : (isAchievedResult ? 'Результат достигнут — без структурных изменений'
-       : isExternal ? 'Внешнее событие разобрано'
-       : isDiscuss ? 'Обсуждено'
-       : 'Без действий');
+    : 'Без структурных изменений';
 
   const rule = {
     id: uid(),
